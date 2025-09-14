@@ -1,0 +1,92 @@
+/* src/pages/Auth.css */
+.auth-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  padding: 20px;
+  width: 100%;
+}
+
+.auth-container {
+  background: white;
+  border-radius: var(--border-radius);
+  padding: 30px;
+  width: 100%;
+  max-width: 450px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+}
+
+.auth-header {
+  text-align: center;
+  margin-bottom: 25px;
+}
+
+.auth-header .logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.auth-header .logo i {
+  font-size: 32px;
+  color: var(--primary);
+  margin-right: 10px;
+}
+
+.auth-header .logo h1 {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.auth-header p {
+  color: var(--gray);
+  font-size: 14px;
+}
+
+.auth-tabs {
+  display: flex;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--light-gray);
+}
+
+.auth-tabs .tab {
+  flex: 1;
+  padding: 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--gray);
+  border-bottom: 2px solid transparent;
+  transition: var(--transition);
+}
+
+.auth-tabs .tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.auth-tabs .tab:hover {
+  color: var(--primary-dark);
+}
+
+.auth-form {
+  margin-bottom: 20px;
+}
+
+.auth-demo {
+  background: var(--light);
+  padding: 15px;
+  border-radius: var(--border-radius);
+  font-size: 13px;
+  color: var(--gray);
+  width: 100%;
+}
+
+.auth-demo p:first-child {
+  font-weight: 600;
+  margin-bottom: 5px;
+}
