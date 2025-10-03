@@ -1,13 +1,17 @@
 // src/pages/Timetable.js
 import React, { useState, useEffect, useCallback } from 'react';
 import GenerateScheduleModal from '../components/GenerateScheduleModal';
+import AddClassModal from '../components/AddClassModal';
 import AIAgent from '../components/AIAgent';
 import Header from '../components/Header';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../hooks/useToast';
 import '../styles/Dashboard.css';
+import './Timetable.css';
 
 const Timetable = ({ excelData, timetableData, onTimetableUpdate, user }) => {
   const { currentUser } = useAuth();
+  const { showToast } = useToast();
   const [showModal, setShowModal] = useState(false);
   const [currentTimetable, setCurrentTimetable] = useState(timetableData || []);
   const [filter, setFilter] = useState({
@@ -16,7 +20,11 @@ const Timetable = ({ excelData, timetableData, onTimetableUpdate, user }) => {
     room: 'all'
   });
   const [viewMode, setViewMode] = useState('institutional'); // 'institutional', 'teacher', 'room'
-  // Removed unused analysisResults state
+  const [draggedItem, setDraggedItem] = useState(null);
+  const [conflicts, setConflicts] = useState([]);
+  const [showAddClassModal, setShowAddClassModal] = useState(false);
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
 
   // Initialize with default timetable if no data provided
   const getDefaultTimetable = useCallback(() => {
@@ -75,17 +83,173 @@ const Timetable = ({ excelData, timetableData, onTimetableUpdate, user }) => {
   useEffect(() => {
     if (timetableData && timetableData.length > 0) {
       setCurrentTimetable(timetableData);
+      detectConflicts(timetableData);
     } else {
-      setCurrentTimetable(getDefaultTimetable());
+      const defaultTimetable = getDefaultTimetable();
+      setCurrentTimetable(defaultTimetable);
+      detectConflicts(defaultTimetable);
     }
   }, [timetableData, getDefaultTimetable]);
 
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-  const handleScheduleItemClick = (content, teacher, type) => {
-    if (content) {
-      alert(`Class: ${content}\nTeacher: ${teacher}\nType: ${type}\n\nClick "Generate Schedule" to optimize with AI.`);
+  const handleScheduleItemClick = (content, teacher, type, timeSlot, day) => {
+    if (content && isEditing) {
+      setSelectedTimeSlot({ timeSlot, day, content, teacher, type });
+      setShowAddClassModal(true);
+    } else if (content) {
+      showToast(`Class: ${content} | Teacher: ${teacher} | Type: ${type}`, 'info');
     }
+  };
+
+  const handleDragStart = (e, timeSlot, day, classInfo) => {
+    if (!isEditing) return;
+    setDraggedItem({ timeSlot, day, classInfo });
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e, targetTimeSlot, targetDay) => {
+    e.preventDefault();
+    if (!draggedItem || !isEditing) return;
+
+    // Check for conflicts
+    const targetSlot = currentTimetable.find(slot => slot.time === targetTimeSlot);
+    if (targetSlot?.days[targetDay]) {
+      showToast('Time slot already occupied!', 'error');
+      setDraggedItem(null);
+      return;
+    }
+
+    // Move the class
+    const newTimetable = currentTimetable.map(slot => {
+      if (slot.time === draggedItem.timeSlot) {
+        return {
+          ...slot,
+          days: {
+            ...slot.days,
+            [draggedItem.day]: null
+          }
+        };
+      }
+      if (slot.time === targetTimeSlot) {
+        return {
+          ...slot,
+          days: {
+            ...slot.days,
+            [targetDay]: draggedItem.classInfo
+          }
+        };
+      }
+      return slot;
+    });
+
+    setCurrentTimetable(newTimetable);
+    if (onTimetableUpdate) {
+      onTimetableUpdate(newTimetable);
+    }
+    showToast('Class moved successfully!', 'success');
+    setDraggedItem(null);
+    detectConflicts(newTimetable);
+  };
+
+  const detectConflicts = (timetable) => {
+    const conflictList = [];
+    const teacherSchedule = {};
+    const roomSchedule = {};
+
+    timetable.forEach(timeSlot => {
+      Object.entries(timeSlot.days).forEach(([day, classInfo]) => {
+        if (!classInfo) return;
+
+        const timeKey = `${day}-${timeSlot.time}`;
+        const teacher = classInfo.teacher;
+        const room = classInfo.content.match(/\((.*?)\)/)?.[1];
+
+        // Check teacher conflicts
+        if (teacherSchedule[teacher]) {
+          teacherSchedule[teacher].push(timeKey);
+        } else {
+          teacherSchedule[teacher] = [timeKey];
+        }
+
+        // Check room conflicts
+        if (room) {
+          if (roomSchedule[room]) {
+            roomSchedule[room].push(timeKey);
+          } else {
+            roomSchedule[room] = [timeKey];
+          }
+        }
+      });
+    });
+
+    // Find conflicts
+    Object.entries(teacherSchedule).forEach(([teacher, times]) => {
+      if (times.length > 1) {
+        conflictList.push({ type: 'teacher', resource: teacher, times });
+      }
+    });
+
+    Object.entries(roomSchedule).forEach(([room, times]) => {
+      if (times.length > 1) {
+        conflictList.push({ type: 'room', resource: room, times });
+      }
+    });
+
+    setConflicts(conflictList);
+  };
+
+  const handleAddClass = (newClass) => {
+    if (!selectedTimeSlot) return;
+
+    const newTimetable = currentTimetable.map(slot => {
+      if (slot.time === selectedTimeSlot.timeSlot) {
+        return {
+          ...slot,
+          days: {
+            ...slot.days,
+            [selectedTimeSlot.day]: newClass
+          }
+        };
+      }
+      return slot;
+    });
+
+    setCurrentTimetable(newTimetable);
+    if (onTimetableUpdate) {
+      onTimetableUpdate(newTimetable);
+    }
+    setShowAddClassModal(false);
+    setSelectedTimeSlot(null);
+    showToast('Class added successfully!', 'success');
+    detectConflicts(newTimetable);
+  };
+
+  const handleDeleteClass = (timeSlot, day) => {
+    const newTimetable = currentTimetable.map(slot => {
+      if (slot.time === timeSlot) {
+        return {
+          ...slot,
+          days: {
+            ...slot.days,
+            [day]: null
+          }
+        };
+      }
+      return slot;
+    });
+
+    setCurrentTimetable(newTimetable);
+    if (onTimetableUpdate) {
+      onTimetableUpdate(newTimetable);
+    }
+    showToast('Class deleted successfully!', 'success');
+    detectConflicts(newTimetable);
   };
 
   const handleScheduleGenerated = (newSchedule) => {
@@ -250,8 +414,15 @@ const Timetable = ({ excelData, timetableData, onTimetableUpdate, user }) => {
         </div>
         
         <div className="actions">
+          <button 
+            className={`btn ${isEditing ? 'btn-success' : 'btn-warning'}`}
+            onClick={() => setIsEditing(!isEditing)}
+          >
+            <i className={`fas ${isEditing ? 'fa-check' : 'fa-edit'}`}></i> 
+            {isEditing ? 'Save Changes' : 'Edit Mode'}
+          </button>
           <button className="btn btn-primary" onClick={handleGenerateClick}>
-            <i className="fas fa-robot"></i> AI Optimize Schedule
+            <i className="fas fa-robot"></i> AI Optimize
           </button>
           <button className="btn btn-secondary" onClick={handleExportTimetable}>
             <i className="fas fa-download"></i> Export CSV
@@ -298,6 +469,18 @@ const Timetable = ({ excelData, timetableData, onTimetableUpdate, user }) => {
         </button>
       </div>
 
+      {conflicts.length > 0 && (
+        <div className="conflicts-alert">
+          <h4><i className="fas fa-exclamation-triangle"></i> Schedule Conflicts Detected</h4>
+          {conflicts.map((conflict, index) => (
+            <div key={index} className="conflict-item">
+              <strong>{conflict.type === 'teacher' ? 'Teacher' : 'Room'} Conflict:</strong> 
+              {conflict.resource} has overlapping schedules
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="timetable-container">
         <div className="timetable-view">
           <div className="timetable-header">
@@ -309,21 +492,52 @@ const Timetable = ({ excelData, timetableData, onTimetableUpdate, user }) => {
             <div key={index} className="timetable-row">
               <div className="time-slot">{row.time}</div>
               {daysOfWeek.map(day => (
-                <div key={day} className="timetable-cell">
-                  {row.days[day] && (
+                <div 
+                  key={day} 
+                  className={`timetable-cell ${isEditing ? 'editable' : ''}`}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, row.time, day)}
+                  onClick={() => {
+                    if (isEditing && !row.days[day]) {
+                      setSelectedTimeSlot({ timeSlot: row.time, day });
+                      setShowAddClassModal(true);
+                    }
+                  }}
+                >
+                  {row.days[day] ? (
                     <div 
-                      className={`schedule-item ${row.days[day].type}`}
+                      className={`schedule-item ${row.days[day].type} ${isEditing ? 'draggable' : ''}`}
+                      draggable={isEditing}
+                      onDragStart={(e) => handleDragStart(e, row.time, day, row.days[day])}
                       onClick={() => handleScheduleItemClick(
                         row.days[day].content, 
                         row.days[day].teacher, 
-                        row.days[day].type
+                        row.days[day].type,
+                        row.time,
+                        day
                       )}
                     >
+                      {isEditing && (
+                        <button 
+                          className="delete-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClass(row.time, day);
+                          }}
+                        >
+                          <i className="fas fa-times"></i>
+                        </button>
+                      )}
                       <div className="class-title">{row.days[day].content}</div>
                       <div className="class-teacher">{row.days[day].teacher}</div>
                       <div className="class-type">{row.days[day].type}</div>
                     </div>
-                  )}
+                  ) : isEditing ? (
+                    <div className="empty-slot">
+                      <i className="fas fa-plus"></i>
+                      <span>Add Class</span>
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -336,6 +550,22 @@ const Timetable = ({ excelData, timetableData, onTimetableUpdate, user }) => {
           onClose={() => setShowModal(false)} 
           onScheduleGenerated={handleScheduleGenerated}
           excelData={excelData}
+        />
+      )}
+
+      {showAddClassModal && (
+        <AddClassModal
+          onClose={() => {
+            setShowAddClassModal(false);
+            setSelectedTimeSlot(null);
+          }}
+          onAddClass={handleAddClass}
+          timeSlot={selectedTimeSlot}
+          existingClass={selectedTimeSlot?.content ? {
+            content: selectedTimeSlot.content,
+            teacher: selectedTimeSlot.teacher,
+            type: selectedTimeSlot.type
+          } : null}
         />
       )}
         </div>

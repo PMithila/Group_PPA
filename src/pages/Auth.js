@@ -37,7 +37,14 @@ const Auth = () => {
         navigate('/dashboard');
       }
     } catch (err) {
-      setError(isRegister ? 'Registration failed' : 'Login failed');
+      console.error('Auth error:', err);
+      if (err.response?.status === 400 && err.response?.data?.detail === 'User exists') {
+        setError('An account with this email already exists. Please try logging in instead.');
+      } else if (err.response?.status === 401) {
+        setError('Invalid email or password. Please check your credentials.');
+      } else {
+        setError(isRegister ? 'Registration failed. Please try again.' : 'Login failed. Please try again.');
+      }
     }
     
     setLoading(false);

@@ -1,10 +1,10 @@
 # main.py
-from fastapi import FastAPI, Depends, UploadFile, File, HTTPException
+from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 import shutil, os
-import db, models, auth, utils, scheduler
-from db import init_db, engine
+from . import db, models, auth, utils, scheduler
+from .db import init_db, engine
 from typing import List
 import pandas as pd
 
@@ -29,17 +29,42 @@ def create_user(session: Session, email: str, password: str):
     return u
 
 @app.post("/auth/register")
-def register(request: models.RegisterRequest):
-    print(f"Registration attempt for: {request.email}")
-    with Session(engine) as session:
-        existing = session.exec(select(models.User).where(models.User.email == request.email)).first()
-        if existing:
-            print(f"User already exists: {request.email}")
-            raise HTTPException(status_code=400, detail="User exists")
-        user = create_user(session, request.email, request.password)
-        print(f"User created successfully: {user.email}")
-        token = auth.create_access_token({"sub": str(user.id), "email": user.email})
-        return {"access_token": token, "token_type": "bearer"}
+async def register(request: Request):
+    try:
+        # Get raw body for debugging
+        body = await request.body()
+        print(f"Raw request body: {body}")
+        
+        # Parse JSON manually to see what's being sent
+        import json
+        data = json.loads(body)
+        print(f"Parsed JSON data: {data}")
+        
+        # Validate required fields
+        if not data.get('email') or not data.get('password'):
+            raise HTTPException(status_code=400, detail="Email and password are required")
+        
+        email = data['email']
+        password = data['password']
+        name = data.get('name')
+        
+        print(f"Registration attempt for: {email}, name: {name}")
+        
+        with Session(engine) as session:
+            existing = session.exec(select(models.User).where(models.User.email == email)).first()
+            if existing:
+                print(f"User already exists: {email}")
+                raise HTTPException(status_code=400, detail="User exists")
+            user = create_user(session, email, password)
+            print(f"User created successfully: {user.email}")
+            token = auth.create_access_token({"sub": str(user.id), "email": user.email})
+            return {"access_token": token, "token_type": "bearer"}
+    except json.JSONDecodeError as e:
+        print(f"JSON decode error: {e}")
+        raise HTTPException(status_code=400, detail="Invalid JSON format")
+    except Exception as e:
+        print(f"Registration error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/auth/token")
 def login(request: models.LoginRequest):
