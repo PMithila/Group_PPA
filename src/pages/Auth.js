@@ -22,19 +22,25 @@ const Auth = () => {
 
     try {
       if (isRegister) {
-        // Use API for registration
-        const data = await register(email, password, name);
-        const token = data.access_token;
-        localStorage.setItem('stms_token', token);
-        setToken(token);
-        navigate('/dashboard');
+        const result = await authRegister({ email, password, name });
+        if (result.success) {
+          // All users are registered as teachers, so redirect to the teacher view
+          navigate('/classes');
+        } else {
+          setError(result.error || 'Registration failed');
+        }
       } else {
-        // Use API for login
-        const data = await login(email, password);
-        const token = data.access_token;
-        localStorage.setItem('stms_token', token);
-        setToken(token);
-        navigate('/dashboard');
+        const result = await authLogin(email, password);
+        if (result.success) {
+          // Redirect based on user role
+          if (result.user.role === 'admin') {
+            navigate('/dashboard');
+          } else {
+            navigate('/classes');
+          }
+        } else {
+          setError(result.error || 'Login failed');
+        }
       }
     } catch (err) {
       setError(isRegister ? 'Registration failed' : 'Login failed');

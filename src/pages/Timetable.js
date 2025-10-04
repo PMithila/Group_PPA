@@ -4,12 +4,14 @@ import GenerateScheduleModal from '../components/GenerateScheduleModal';
 import AIAgent from '../components/AIAgent';
 import Header from '../components/Header';
 import { useAuth } from '../context/AuthContext';
+import { getClasses } from '../api'; // Import getClasses
 import '../styles/Dashboard.css';
 
-const Timetable = ({ excelData, timetableData, onTimetableUpdate, user }) => {
+const Timetable = ({ timetableData, onTimetableUpdate, user }) => {
   const { currentUser } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [currentTimetable, setCurrentTimetable] = useState(timetableData || []);
+  const [classes, setClasses] = useState([]); // Add state for classes
   const [filter, setFilter] = useState({
     type: 'all',
     teacher: 'all',
@@ -73,6 +75,18 @@ const Timetable = ({ excelData, timetableData, onTimetableUpdate, user }) => {
   }, []);
 
   useEffect(() => {
+    // Fetch classes from the database
+    const fetchClasses = async () => {
+      try {
+        const fetchedClasses = await getClasses();
+        setClasses(fetchedClasses);
+      } catch (error) {
+        console.error("Failed to fetch classes:", error);
+      }
+    };
+
+    fetchClasses();
+
     if (timetableData && timetableData.length > 0) {
       setCurrentTimetable(timetableData);
     } else {
@@ -204,12 +218,6 @@ const Timetable = ({ excelData, timetableData, onTimetableUpdate, user }) => {
           <div className="page-header">
             <h2>Timetable Management</h2>
             <p>View and manage your institution's timetable</p>
-            {excelData && (
-              <div className="data-indicator">
-                <i className="fas fa-check-circle"></i>
-                <span>Using imported data</span>
-              </div>
-            )}
           </div>
 
           {/* AI Agent Component */}
@@ -335,7 +343,7 @@ const Timetable = ({ excelData, timetableData, onTimetableUpdate, user }) => {
         <GenerateScheduleModal 
           onClose={() => setShowModal(false)} 
           onScheduleGenerated={handleScheduleGenerated}
-          excelData={excelData}
+          classes={classes} // Pass classes to the modal
         />
       )}
         </div>

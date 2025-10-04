@@ -1,6 +1,6 @@
 // src/context/AuthContext.js
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { getToken } from '../api';
+import { getToken, setToken as setApiToken } from '../api';
 
 const AuthContext = createContext();
 
@@ -13,20 +13,34 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is logged in on app load
-    const token = getToken();
-    if (token) {
-      // For demo purposes, set a mock user
-      // In a real app, you would verify the token with your backend
-      const userData = {
-        id: 1,
-        email: 'demo@school.edu',
-        name: 'Demo User',
-        role: 'teacher'
-      };
-      setCurrentUser(userData);
-    }
-    setLoading(false);
+    const checkLoggedIn = async () => {
+      const token = getToken();
+      if (token) {
+        setApiToken(token);
+        try {
+          const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+          const userResponse = await fetch(`${API_BASE_URL}/auth/me`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+
+          if (userResponse.ok) {
+            const userData = await userResponse.json();
+            setCurrentUser(userData);
+          } else {
+            // Token is invalid or expired
+            logout();
+          }
+        } catch (error) {
+          console.error('Failed to fetch user on load', error);
+          logout();
+        }
+      }
+      setLoading(false);
+    };
+
+    checkLoggedIn();
   }, []);
 
   const login = async (email, password) => {
@@ -57,7 +71,7 @@ export const AuthProvider = ({ children }) => {
         if (userResponse.ok) {
           const userData = await userResponse.json();
           setCurrentUser(userData);
-          return { success: true };
+          return { success: true, user: userData };
         }
         
         // Fallback if /auth/me endpoint doesn't exist
@@ -109,6 +123,16 @@ export const AuthProvider = ({ children }) => {
         setCurrentUser(newUser);
         return { success: true };
       } else {
+        const errorData = await response.json();
+        // Extract validation errors from express-validator
+        if (errorData.errors && errorData.errors.length > 0) {
+          // Handles validation errors (e.g., short password)
+          const messages = errorData.errors.map(err => err.msg).join(', ');
+          return { success: false, error: messages };
+        } else if (errorData.error) {
+          // Handles other specific errors (e.g., 'User already exists')
+          return { success: false, error: errorData.error };
+        }
         return { success: false, error: 'Registration failed' };
       }
     } catch (error) {

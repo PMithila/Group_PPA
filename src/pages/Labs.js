@@ -2,83 +2,88 @@
 import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import { useAuth } from '../context/AuthContext';
+import { getLabs, createLab, updateLab, deleteLab } from '../api';
 import '../styles/Dashboard.css';
 
-const Labs = ({ excelData }) => {
+const Labs = () => {
   const { currentUser } = useAuth();
   const [labs, setLabs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingLab, setEditingLab] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
-    capacity: '',
-    equipment: '',
-    supervisor: '',
-    status: 'Available'
+    capacity: 0,
+    resources: []
   });
 
-  useEffect(() => {
-    const savedLabs = localStorage.getItem('stms_labs');
-    if (savedLabs) {
-      setLabs(JSON.parse(savedLabs));
-    } else {
-      setLabs([
-        { id: 1, name: 'Computer Lab 1', capacity: 30, equipment: '25 Computers, Projector', supervisor: 'Dr. Smith', status: 'Available' },
-        { id: 2, name: 'Physics Lab', capacity: 25, equipment: 'Oscilloscopes, Multimeters', supervisor: 'Prof. Johnson', status: 'Available' },
-        { id: 3, name: 'Chemistry Lab', capacity: 20, equipment: 'Bunsen Burners, Beakers', supervisor: 'Dr. Williams', status: 'Maintenance' }
-      ]);
+  const fetchLabs = async () => {
+    try {
+      setLoading(true);
+      const fetchedLabs = await getLabs();
+      setLabs(fetchedLabs);
+    } catch (err) {
+      setError('Failed to fetch labs.');
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
-    localStorage.setItem('stms_labs', JSON.stringify(labs));
-  }, [labs]);
+    fetchLabs();
+  }, []);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value
-    });
+    setFormData({ ...formData, [name]: value });
   };
 
-  const handleSubmit = (e) => {
+  const handleResourcesChange = (e) => {
+    const { value } = e.target;
+    setFormData({ ...formData, resources: value.split(',').map(item => item.trim()) });
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (editingLab) {
-      setLabs(labs.map(lab => 
-        lab.id === editingLab.id ? { ...lab, ...formData } : lab
-      ));
-    } else {
-      const newLab = {
-        id: Date.now(),
-        ...formData,
-        capacity: parseInt(formData.capacity)
-      };
-      setLabs([...labs, newLab]);
+    try {
+      if (editingLab) {
+        const updated = await updateLab(editingLab.id, formData);
+        setLabs(labs.map(l => (l.id === editingLab.id ? updated : l)));
+      } else {
+        const newLab = await createLab(formData);
+        setLabs([...labs, newLab]);
+      }
+      resetForm();
+    } catch (err) {
+      setError('Failed to save lab.');
+      console.error(err);
     }
-    
-    setFormData({ name: '', capacity: '', equipment: '', supervisor: '', status: 'Available' });
-    setEditingLab(null);
-    setShowForm(false);
   };
 
   const handleEdit = (lab) => {
-    setFormData({
-      name: lab.name,
-      capacity: lab.capacity,
-      equipment: lab.equipment,
-      supervisor: lab.supervisor,
-      status: lab.status
-    });
     setEditingLab(lab);
+    setFormData(lab);
     setShowForm(true);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this lab?')) {
-      setLabs(labs.filter(lab => lab.id !== id));
+      try {
+        await deleteLab(id);
+        setLabs(labs.filter(l => l.id !== id));
+      } catch (err) {
+        setError('Failed to delete lab.');
+        console.error(err);
+      }
     }
+  };
+
+  const resetForm = () => {
+    setFormData({ name: '', capacity: 0, resources: [] });
+    setEditingLab(null);
+    setShowForm(false);
   };
 
   const getStatusColor = (status) => {
@@ -131,82 +136,19 @@ const Labs = ({ excelData }) => {
                   <form onSubmit={handleSubmit}>
                     <div className="form-group">
                       <label>Lab Name</label>
-                      <input
-                        type="text"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        required
-                        placeholder="e.g., Computer Lab 1"
-                      />
+                      <input type="text" name="name" value={formData.name} onChange={handleInputChange} required placeholder="e.g., Computer Lab 1" />
                     </div>
-                    
                     <div className="form-group">
                       <label>Capacity</label>
-                      <input
-                        type="number"
-                        name="capacity"
-                        value={formData.capacity}
-                        onChange={handleInputChange}
-                        required
-                        min="1"
-                        placeholder="e.g., 30"
-                      />
+                      <input type="number" name="capacity" value={formData.capacity} onChange={handleInputChange} required min="1" placeholder="e.g., 30" />
                     </div>
-                    
                     <div className="form-group">
-                      <label>Equipment</label>
-                      <textarea
-                        name="equipment"
-                        value={formData.equipment}
-                        onChange={handleInputChange}
-                        required
-                        placeholder="e.g., 25 Computers, Projector"
-                        rows="3"
-                      />
+                      <label>Resources (comma-separated)</label>
+                      <textarea name="resources" value={Array.isArray(formData.resources) ? formData.resources.join(', ') : ''} onChange={handleResourcesChange} placeholder="e.g., 25 Computers, Projector" rows="3" />
                     </div>
-                    
-                    <div className="form-group">
-                      <label>Supervisor</label>
-                      <input
-                        type="text"
-                        name="supervisor"
-                        value={formData.supervisor}
-                        onChange={handleInputChange}
-                        required
-                        placeholder="e.g., Dr. Smith"
-                      />
-                    </div>
-                    
-                    <div className="form-group">
-                      <label>Status</label>
-                      <select
-                        name="status"
-                        value={formData.status}
-                        onChange={handleInputChange}
-                        required
-                      >
-                        <option value="Available">Available</option>
-                        <option value="Occupied">Occupied</option>
-                        <option value="Maintenance">Maintenance</option>
-                      </select>
-                    </div>
-                    
                     <div className="form-actions">
-                      <button 
-                        type="button" 
-                        className="btn btn-secondary"
-                        onClick={() => {
-                          setShowForm(false);
-                          setEditingLab(null);
-                          setFormData({ name: '', capacity: '', equipment: '', supervisor: '', status: 'Available' });
-                        }}
-                      >
-                        Cancel
-                      </button>
-                      <button type="submit" className="btn btn-primary">
-                        {editingLab ? 'Update Lab' : 'Add Lab'}
-                      </button>
+                      <button type="button" className="btn btn-secondary" onClick={resetForm}>Cancel</button>
+                      <button type="submit" className="btn btn-primary">{editingLab ? 'Update Lab' : 'Add Lab'}</button>
                     </div>
                   </form>
                 </div>
@@ -214,50 +156,50 @@ const Labs = ({ excelData }) => {
             )}
 
             <div className="cards-grid">
-              {labs.map(lab => (
-                <div key={lab.id} className="lab-card">
-                  <div className="lab-card-header">
-                    <h4>{lab.name}</h4>
-                    <span className={`status-badge ${getStatusColor(lab.status)}`}>
-                      {lab.status}
-                    </span>
-                  </div>
-                  
-                  <div className="lab-card-details">
-                    <div className="detail-item">
-                      <i className="fas fa-users"></i>
-                      <span>Capacity: {lab.capacity} students</span>
-                    </div>
-                    
-                    <div className="detail-item">
-                      <i className="fas fa-tools"></i>
-                      <span>Equipment: {lab.equipment}</span>
-                    </div>
-                    
-                    <div className="detail-item">
-                      <i className="fas fa-user-tie"></i>
-                      <span>Supervisor: {lab.supervisor}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="lab-card-actions">
-                    <button 
-                      className="btn-icon"
-                      onClick={() => handleEdit(lab)}
-                      title="Edit"
-                    >
-                      <i className="fas fa-edit"></i>
-                    </button>
-                    <button 
-                      className="btn-icon"
-                      onClick={() => handleDelete(lab.id)}
-                      title="Delete"
-                    >
-                      <i className="fas fa-trash"></i>
-                    </button>
-                  </div>
+              {loading ? (
+                <div className="loading-state"><i className="fas fa-spinner fa-spin"></i> Loading labs...</div>
+              ) : error ? (
+                <div className="alert alert-error">{error}</div>
+              ) : labs.length === 0 ? (
+                <div className="empty-state">
+                  <i className="fas fa-flask"></i>
+                  <p>No laboratories found. Add your first lab to get started.</p>
                 </div>
-              ))}
+              ) : ( 
+                labs.map(lab => (
+                  <div key={lab.id} className="lab-card">
+                    <div className="lab-card-header">
+                      <h4>{lab.name}</h4>
+                    </div>
+                    <div className="lab-card-details">
+                      <div className="detail-item">
+                        <i className="fas fa-users"></i>
+                        <span>Capacity: {lab.capacity} students</span>
+                      </div>
+                      <div className="detail-item">
+                        <i className="fas fa-tools"></i>
+                        <span>Resources: {Array.isArray(lab.resources) ? lab.resources.join(', ') : ''}</span>
+                      </div>
+                    </div>
+                    <div className="lab-card-actions">
+                      <button 
+                        className="btn-icon"
+                        onClick={() => handleEdit(lab)}
+                        title="Edit"
+                      >
+                        <i className="fas fa-edit"></i>
+                      </button>
+                      <button 
+                        className="btn-icon"
+                        onClick={() => handleDelete(lab.id)}
+                        title="Delete"
+                      >
+                        <i className="fas fa-trash"></i>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
             
             {labs.length === 0 && (

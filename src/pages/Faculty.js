@@ -2,84 +2,84 @@
 import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import { useAuth } from '../context/AuthContext';
+import { getFaculty, createFaculty, updateFaculty, deleteFaculty } from '../api';
 import '../styles/Dashboard.css';
 
-const Faculty = ({ excelData }) => {
+const Faculty = () => {
   const { currentUser } = useAuth();
   const [faculty, setFaculty] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    phone: '',
-    department: '',
-    subjects: '',
-    status: 'Active'
+    subject: '',
+    availability: {}
   });
 
-  useEffect(() => {
-    const savedFaculty = localStorage.getItem('stms_faculty');
-    if (savedFaculty) {
-      setFaculty(JSON.parse(savedFaculty));
-    } else {
-      setFaculty([
-        { id: 1, name: 'Dr. Smith', email: 'smith@school.edu', phone: '555-1234', department: 'Mathematics', subjects: 'Calculus, Algebra', status: 'Active' },
-        { id: 2, name: 'Prof. Johnson', email: 'johnson@school.edu', phone: '555-5678', department: 'Physics', subjects: 'Mechanics, Thermodynamics', status: 'Active' },
-        { id: 3, name: 'Dr. Williams', email: 'williams@school.edu', phone: '555-9012', department: 'Computer Science', subjects: 'Programming, Algorithms', status: 'On Leave' }
-      ]);
+  const fetchFaculty = async () => {
+    try {
+      setLoading(true);
+      const fetchedFaculty = await getFaculty();
+      setFaculty(fetchedFaculty);
+    } catch (err) {
+      setError('Failed to fetch faculty.');
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
-    localStorage.setItem('stms_faculty', JSON.stringify(faculty));
-  }, [faculty]);
+    fetchFaculty();
+  }, []);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value
-    });
+    setFormData({ ...formData, [name]: value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (editingTeacher) {
-      setFaculty(faculty.map(teacher => 
-        teacher.id === editingTeacher.id ? { ...teacher, ...formData } : teacher
-      ));
-    } else {
-      const newTeacher = {
-        id: Date.now(),
-        ...formData
-      };
-      setFaculty([...faculty, newTeacher]);
+    try {
+      if (editingTeacher) {
+        const updated = await updateFaculty(editingTeacher.id, formData);
+        setFaculty(faculty.map(f => (f.id === editingTeacher.id ? updated : f)));
+      } else {
+        const newFaculty = await createFaculty(formData);
+        setFaculty([...faculty, newFaculty]);
+      }
+      resetForm();
+    } catch (err) {
+      setError('Failed to save faculty member.');
+      console.error(err);
     }
-    
-    setFormData({ name: '', email: '', phone: '', department: '', subjects: '', status: 'Active' });
-    setEditingTeacher(null);
-    setShowForm(false);
   };
 
   const handleEdit = (teacher) => {
-    setFormData({
-      name: teacher.name,
-      email: teacher.email,
-      phone: teacher.phone,
-      department: teacher.department,
-      subjects: teacher.subjects,
-      status: teacher.status
-    });
     setEditingTeacher(teacher);
+    setFormData(teacher);
     setShowForm(true);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this faculty member?')) {
-      setFaculty(faculty.filter(teacher => teacher.id !== id));
+      try {
+        await deleteFaculty(id);
+        setFaculty(faculty.filter(f => f.id !== id));
+      } catch (err) {
+        setError('Failed to delete faculty member.');
+        console.error(err);
+      }
     }
+  };
+
+  const resetForm = () => {
+    setFormData({ name: '', email: '', subject: '', availability: {} });
+    setEditingTeacher(null);
+    setShowForm(false);
   };
 
   const getStatusColor = (status) => {
@@ -153,66 +153,23 @@ const Faculty = ({ excelData }) => {
                         placeholder="e.g., smith@school.edu"
                       />
                     </div>
-                    
+
                     <div className="form-group">
-                      <label>Phone Number</label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={formData.phone}
-                        onChange={handleInputChange}
-                        required
-                        placeholder="e.g., 555-1234"
-                      />
-                    </div>
-                    
-                    <div className="form-group">
-                      <label>Department</label>
+                      <label>Subject</label>
                       <input
                         type="text"
-                        name="department"
-                        value={formData.department}
+                        name="subject"
+                        value={formData.subject}
                         onChange={handleInputChange}
-                        required
-                        placeholder="e.g., Mathematics"
+                        placeholder="e.g., Computer Science"
                       />
-                    </div>
-                    
-                    <div className="form-group">
-                      <label>Subjects</label>
-                      <input
-                        type="text"
-                        name="subjects"
-                        value={formData.subjects}
-                        onChange={handleInputChange}
-                        required
-                        placeholder="e.g., Calculus, Algebra"
-                      />
-                    </div>
-                    
-                    <div className="form-group">
-                      <label>Status</label>
-                      <select
-                        name="status"
-                        value={formData.status}
-                        onChange={handleInputChange}
-                        required
-                      >
-                        <option value="Active">Active</option>
-                        <option value="On Leave">On Leave</option>
-                        <option value="Inactive">Inactive</option>
-                      </select>
                     </div>
                     
                     <div className="form-actions">
                       <button 
                         type="button" 
                         className="btn btn-secondary"
-                        onClick={() => {
-                          setShowForm(false);
-                          setEditingTeacher(null);
-                          setFormData({ name: '', email: '', phone: '', department: '', subjects: '', status: 'Active' });
-                        }}
+                        onClick={resetForm}
                       >
                         Cancel
                       </button>
@@ -231,10 +188,8 @@ const Faculty = ({ excelData }) => {
                   <tr>
                     <th>Name</th>
                     <th>Email</th>
-                    <th>Phone</th>
-                    <th>Department</th>
-                    <th>Subjects</th>
-                    <th>Status</th>
+                    <th>Email</th>
+                    <th>Subject</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -243,14 +198,7 @@ const Faculty = ({ excelData }) => {
                     <tr key={teacher.id}>
                       <td>{teacher.name}</td>
                       <td>{teacher.email}</td>
-                      <td>{teacher.phone}</td>
-                      <td>{teacher.department}</td>
-                      <td>{teacher.subjects}</td>
-                      <td>
-                        <span className={`status-badge ${getStatusColor(teacher.status)}`}>
-                          {teacher.status}
-                        </span>
-                      </td>
+                      <td>{teacher.subject}</td>
                       <td>
                         <div className="action-buttons">
                           <button 

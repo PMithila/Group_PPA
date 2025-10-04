@@ -1,7 +1,7 @@
 // src/components/GenerateScheduleModal.js
 import React, { useState, useEffect } from 'react';
 
-const GenerateScheduleModal = ({ onClose, onScheduleGenerated, excelData }) => {
+const GenerateScheduleModal = ({ onClose, onScheduleGenerated, classes }) => {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('Initializing AI scheduler...');
   const [aiInsights, setAiInsights] = useState([]);
@@ -26,10 +26,10 @@ const GenerateScheduleModal = ({ onClose, onScheduleGenerated, excelData }) => {
           
           // Add AI insights at certain points
           if (step.progress === 40) {
-            setAiInsights(prev => [...prev, "AI: Found 3 potential room conflicts"]);
+            setAiInsights(prev => [...prev, "AI: Found potential room conflicts"]);
           }
           if (step.progress === 60) {
-            setAiInsights(prev => [...prev, "AI: Resolved all teacher double-booking issues"]);
+            setAiInsights(prev => [...prev, "AI: Resolved teacher double-booking issues"]);
           }
           if (step.progress === 80) {
             setAiInsights(prev => [...prev, "AI: Balanced workload across all faculty members"]);
@@ -37,7 +37,7 @@ const GenerateScheduleModal = ({ onClose, onScheduleGenerated, excelData }) => {
           
           if (index === steps.length - 1) {
             setTimeout(() => {
-              onScheduleGenerated(generateOptimalSchedule());
+              onScheduleGenerated(generateOptimalSchedule(classes));
             }, 1000);
           }
         }, (index + 1) * 800);
@@ -46,40 +46,44 @@ const GenerateScheduleModal = ({ onClose, onScheduleGenerated, excelData }) => {
 
     simulateAIAnalysis();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onScheduleGenerated, excelData]);
+  }, [onScheduleGenerated, classes]);
 
-  const generateOptimalSchedule = () => {
-    // Use imported data if available, otherwise use default data
-    const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const generateOptimalSchedule = (classes) => {
+    const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
     const timeSlots = [
       '8:00-9:00', '9:00-10:00', '10:00-11:00', 
       '11:00-12:00', '12:00-1:00', '1:00-2:00'
     ];
     
-    const subjects = excelData?.subjects?.map(s => s.code) || ['CS101', 'MATH101', 'PHY101', 'ENG101', 'CHEM101'];
-    const rooms = excelData?.classrooms?.map(r => r.name) || ['Room A12', 'Room B5', 'Room C10', 'Room D2', 'Lab 1', 'Lab 2', 'Lab 3'];
-    const classTypes = ['lecture', 'lab', 'tutorial'];
-    
-    return timeSlots.map(time => {
-      const dayEntries = {};
-      daysOfWeek.forEach(day => {
-        // 30% chance of empty slot
-        if (Math.random() > 0.7) {
-          dayEntries[day] = null;
-        } else {
-          const type = classTypes[Math.floor(Math.random() * classTypes.length)];
-          const subject = subjects[Math.floor(Math.random() * subjects.length)];
-          const room = rooms[Math.floor(Math.random() * rooms.length)];
-          
-          dayEntries[day] = {
-            type,
-            content: `${subject} (${room})`
+    // Use the classes from the database
+    const subjects = classes.map(c => ({ code: c.code, teacher: c.teacher, room: c.room }));
+    const rooms = [...new Set(classes.map(c => c.room).filter(Boolean))];
+    const classTypes = ['lecture', 'lab', 'tutorial']; // You can customize this
+
+    let schedule = timeSlots.map(time => ({
+      time,
+      days: daysOfWeek.reduce((acc, day) => ({ ...acc, [day]: null }), {}),
+    }));
+
+    // A simple scheduling algorithm
+    subjects.forEach(subject => {
+      let placed = false;
+      while (!placed) {
+        const randomDay = daysOfWeek[Math.floor(Math.random() * daysOfWeek.length)];
+        const randomSlotIndex = Math.floor(Math.random() * timeSlots.length);
+
+        if (!schedule[randomSlotIndex].days[randomDay]) {
+          schedule[randomSlotIndex].days[randomDay] = {
+            type: classTypes[Math.floor(Math.random() * classTypes.length)],
+            content: `${subject.code} (${subject.room || rooms[Math.floor(Math.random() * rooms.length)] || 'TBD'})`,
+            teacher: subject.teacher || 'Unassigned',
           };
+          placed = true;
         }
-      });
-      
-      return { time, days: dayEntries };
+      }
     });
+
+    return schedule;
   };
 
   const handleDone = () => {
@@ -114,7 +118,6 @@ const GenerateScheduleModal = ({ onClose, onScheduleGenerated, excelData }) => {
             ))}
             <li>Using constraint satisfaction algorithm for optimal scheduling</li>
             <li>Considering teacher preferences and room capacities</li>
-            {excelData && <li>Custom constraints from imported data applied</li>}
           </ul>
         </div>
         

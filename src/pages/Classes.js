@@ -2,12 +2,14 @@
 import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import { useAuth } from '../context/AuthContext';
+import { getClasses, createClass, updateClass, deleteClass } from '../api';
 import '../styles/Dashboard.css';
 
-const Classes = ({ excelData }) => {
+const Classes = () => {
   const { currentUser } = useAuth();
-  // Use imported subjects as initial classes
   const [classes, setClasses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingClass, setEditingClass] = useState(null);
   const [formData, setFormData] = useState({
@@ -18,67 +20,67 @@ const Classes = ({ excelData }) => {
     room: ''
   });
 
-  // Initialize classes from imported subjects
-  useEffect(() => {
-    if (excelData && excelData.subjects) {
-      // Add unique id for each subject
-      setClasses(
-        excelData.subjects.map((subj, idx) => ({
-          id: idx + 1,
-          code: subj.code || '',
-          name: subj.name || '',
-          teacher: subj.teacher || '',
-          duration: subj['hours per week'] ? `${subj['hours per week']} hours` : '1 hour',
-          room: subj.room || ''
-        }))
-      );
-    } else {
-      setClasses([]);
+  const fetchClasses = async () => {
+    try {
+      setLoading(true);
+      const fetchedClasses = await getClasses();
+      setClasses(fetchedClasses);
+    } catch (err) {
+      setError('Failed to fetch classes.');
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-  }, [excelData]);
+  };
+
+  useEffect(() => {
+    fetchClasses();
+  }, []);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value
-    });
+    setFormData({ ...formData, [name]: value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (editingClass) {
-      setClasses(classes.map(cls =>
-        cls.id === editingClass.id ? { ...cls, ...formData } : cls
-      ));
-    } else {
-      const newClass = {
-        id: classes.length > 0 ? Math.max(...classes.map(c => c.id)) + 1 : 1,
-        ...formData
-      };
-      setClasses([...classes, newClass]);
+    try {
+      if (editingClass) {
+        const updated = await updateClass(editingClass.id, formData);
+        setClasses(classes.map(cls => (cls.id === editingClass.id ? updated : cls)));
+      } else {
+        const newClass = await createClass(formData);
+        setClasses([...classes, newClass]);
+      }
+      resetForm();
+    } catch (err) {
+      setError('Failed to save class.');
+      console.error(err);
     }
-    setFormData({ code: '', name: '', teacher: '', duration: '1 hour', room: '' });
-    setEditingClass(null);
-    setShowForm(false);
   };
 
   const handleEdit = (cls) => {
-    setFormData({
-      code: cls.code,
-      name: cls.name,
-      teacher: cls.teacher,
-      duration: cls.duration,
-      room: cls.room
-    });
     setEditingClass(cls);
+    setFormData(cls);
     setShowForm(true);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this class?')) {
-      setClasses(classes.filter(cls => cls.id !== id));
+      try {
+        await deleteClass(id);
+        setClasses(classes.filter(cls => cls.id !== id));
+      } catch (err) {
+        setError('Failed to delete class.');
+        console.error(err);
+      }
     }
+  };
+
+  const resetForm = () => {
+    setFormData({ code: '', name: '', teacher: '', duration: '1 hour', room: '' });
+    setEditingClass(null);
+    setShowForm(false);
   };
 
   return (
@@ -88,7 +90,7 @@ const Classes = ({ excelData }) => {
         <div className="page classes-page">
           <div className="page-header">
             <h2>Classes & Subjects</h2>
-            <p>View and manage all subjects imported from your Excel data. You can add, edit, or delete classes below.</p>
+            <p>View and manage all subjects for the timetable. You can add, edit, or delete classes below.</p>
           </div>
           <div className="card">
             <div className="card-header">
@@ -97,16 +99,13 @@ const Classes = ({ excelData }) => {
                 <i className="fas fa-plus"></i> Add New Class
               </button>
             </div>
+            {error && <div className="alert alert-error">{error}</div>}
             {showForm && (
               <div className="modal-overlay">
                 <div className="modal-content">
                   <div className="modal-header">
                     <h3>{editingClass ? 'Edit Class' : 'Add New Class'}</h3>
-                    <button className="btn-icon" onClick={() => {
-                      setShowForm(false);
-                      setEditingClass(null);
-                      setFormData({ code: '', name: '', teacher: '', duration: '1 hour', room: '' });
-                    }}>
+                    <button className="btn-icon" onClick={resetForm}>
                       <i className="fas fa-times"></i>
                     </button>
                   </div>
@@ -121,7 +120,7 @@ const Classes = ({ excelData }) => {
                     </div>
                     <div className="form-group">
                       <label>Teacher</label>
-                      <input type="text" name="teacher" value={formData.teacher} onChange={handleInputChange} required placeholder="e.g., Dr. Smith" />
+                      <input type="text" name="teacher" value={formData.teacher} onChange={handleInputChange} placeholder="e.g., Dr. Smith" />
                     </div>
                     <div className="form-group">
                       <label>Duration</label>
@@ -134,14 +133,10 @@ const Classes = ({ excelData }) => {
                     </div>
                     <div className="form-group">
                       <label>Room</label>
-                      <input type="text" name="room" value={formData.room} onChange={handleInputChange} required placeholder="e.g., Room A12" />
+                      <input type="text" name="room" value={formData.room} onChange={handleInputChange} placeholder="e.g., Room A12" />
                     </div>
                     <div className="form-actions">
-                      <button type="button" className="btn btn-secondary" onClick={() => {
-                        setShowForm(false);
-                        setEditingClass(null);
-                        setFormData({ code: '', name: '', teacher: '', duration: '1 hour', room: '' });
-                      }}>Cancel</button>
+                      <button type="button" className="btn btn-secondary" onClick={resetForm}>Cancel</button>
                       <button type="submit" className="btn btn-primary">{editingClass ? 'Update Class' : 'Add Class'}</button>
                     </div>
                   </form>
@@ -149,44 +144,50 @@ const Classes = ({ excelData }) => {
               </div>
             )}
             <div className="table-container">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Code</th>
-                    <th>Name</th>
-                    <th>Teacher</th>
-                    <th>Duration</th>
-                    <th>Room</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {classes.map(cls => (
-                    <tr key={cls.id}>
-                      <td>{cls.code}</td>
-                      <td>{cls.name}</td>
-                      <td>{cls.teacher}</td>
-                      <td>{cls.duration}</td>
-                      <td>{cls.room}</td>
-                      <td>
-                        <div className="action-buttons">
-                          <button className="btn-icon" onClick={() => handleEdit(cls)} title="Edit">
-                            <i className="fas fa-edit"></i>
-                          </button>
-                          <button className="btn-icon" onClick={() => handleDelete(cls.id)} title="Delete">
-                            <i className="fas fa-trash"></i>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {classes.length === 0 && (
-                <div className="empty-state">
-                  <i className="fas fa-chalkboard"></i>
-                  <p>No classes found. Import data or add your first class to get started.</p>
-                </div>
+              {loading ? (
+                <div className="loading-state"><i className="fas fa-spinner fa-spin"></i> Loading classes...</div>
+              ) : (
+                <>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th>Teacher</th>
+                        <th>Duration</th>
+                        <th>Room</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {classes.map(cls => (
+                        <tr key={cls.id}>
+                          <td>{cls.code}</td>
+                          <td>{cls.name}</td>
+                          <td>{cls.teacher}</td>
+                          <td>{cls.duration}</td>
+                          <td>{cls.room}</td>
+                          <td>
+                            <div className="action-buttons">
+                              <button className="btn-icon" onClick={() => handleEdit(cls)} title="Edit">
+                                <i className="fas fa-edit"></i>
+                              </button>
+                              <button className="btn-icon" onClick={() => handleDelete(cls.id)} title="Delete">
+                                <i className="fas fa-trash"></i>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {classes.length === 0 && !loading && (
+                    <div className="empty-state">
+                      <i className="fas fa-chalkboard"></i>
+                      <p>No classes found. Add your first class to get started.</p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

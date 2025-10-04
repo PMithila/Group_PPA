@@ -39,3 +39,66 @@ export async function runScheduler(algorithm="heuristic") {
   const res = await instance.post("/run_scheduler", null, { params: { algorithm } });
   return res.data;
 }
+
+// Classes API
+export async function getClasses() {
+  const res = await instance.get("/api/classes");
+  return res.data;
+}
+
+export async function createClass(classData) {
+  const res = await instance.post("/api/classes", classData);
+  return res.data;
+}
+
+export async function updateClass(id, classData) {
+  const res = await instance.put(`/api/classes/${id}`, classData);
+  return res.data;
+}
+
+export async function deleteClass(id) {
+  const res = await instance.delete(`/api/classes/${id}`);
+  return res.data;
+}
+
+// Faculty API
+export async function getFaculty() {
+  const res = await instance.get("/api/faculty");
+  return res.data;
+}
+
+export async function createFaculty(facultyData) {
+  const res = await instance.post("/api/faculty", facultyData);
+  return res.data;
+}
+
+export async function updateFaculty(id, facultyData) {
+  const res = await instance.put(`/api/faculty/${id}`, facultyData);
+  return res.data;
+}
+
+export async function deleteFaculty(id) {
+  const res = await instance.delete(`/api/faculty/${id}`);
+  return res.data;
+}
+
+// Labs API
+export async function getLabs() {
+  const res = await instance.get("/api/labs");
+  return res.data;
+}
+
+export async function createLab(labData) {
+  const res = await instance.post("/api/labs", labData);
+  return res.data;
+}
+
+export async function updateLab(id, labData) {
+  const res = await instance.put(`/api/labs/${id}`, labData);
+  return res.data;
+}
+
+export async function deleteLab(id) {
+  const res = await instance.delete(`/api/labs/${id}`);
+  return res.data;
+}
