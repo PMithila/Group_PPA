@@ -3,7 +3,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Auth from './pages/Auth';
-import Dashboard from './pages/Dashboard';
+import DashboardRouter from './pages/DashboardRouter';
 import Settings from './pages/Settings';
 import Classes from './pages/Classes';
 import Faculty from './pages/Faculty';
@@ -17,6 +17,47 @@ const ProtectedRoute = ({ children }) => {
   return currentUser ? children : <Navigate to="/auth" />;
 };
 
+const AdminRoute = ({ children }) => {
+  const { currentUser } = useAuth();
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'ADMIN';
+  
+  if (!currentUser) {
+    return <Navigate to="/auth" />;
+  }
+  
+  if (!isAdmin) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        flexDirection: 'column',
+        gap: '20px'
+      }}>
+        <i className="fas fa-lock" style={{ fontSize: '3rem', color: '#e53e3e' }}></i>
+        <h2 style={{ color: '#e53e3e' }}>Access Denied</h2>
+        <p>You don't have permission to access this page.</p>
+        <button 
+          onClick={() => window.history.back()}
+          style={{ 
+            padding: '10px 20px', 
+            background: '#4299e1', 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: '5px',
+            cursor: 'pointer'
+          }}
+        >
+          Go Back
+        </button>
+      </div>
+    );
+  }
+  
+  return children;
+};
+
 function App() {
   return (
     <AuthProvider>
@@ -28,7 +69,15 @@ function App() {
               path="/dashboard" 
               element={
                 <ProtectedRoute>
-                  <Dashboard />
+                  <DashboardRouter />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/teacher-dashboard" 
+              element={
+                <ProtectedRoute>
+                  <DashboardRouter />
                 </ProtectedRoute>
               } 
             />
@@ -67,9 +116,9 @@ function App() {
             <Route 
               path="/import" 
               element={
-                <ProtectedRoute>
+                <AdminRoute>
                   <ImportData />
-                </ProtectedRoute>
+                </AdminRoute>
               } 
             />
             <Route 

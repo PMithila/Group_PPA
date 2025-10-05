@@ -2,10 +2,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import GenerateScheduleModal from '../components/GenerateScheduleModal';
 import AIAgent from '../components/AIAgent';
+import TeacherNotifications from '../components/TeacherNotifications';
 import Header from '../components/Header';
 import { useAuth } from '../context/AuthContext';
 import { getClasses } from '../api'; // Import getClasses
 import '../styles/Dashboard.css';
+import '../styles/EnhancedComponents.css';
+import '../styles/Timetable.css';
 
 const Timetable = ({ timetableData, onTimetableUpdate, user }) => {
   const { currentUser } = useAuth();
@@ -19,6 +22,83 @@ const Timetable = ({ timetableData, onTimetableUpdate, user }) => {
   });
   const [viewMode, setViewMode] = useState('institutional'); // 'institutional', 'teacher', 'room'
   // Removed unused analysisResults state
+
+  // Convert classes data to timetable format
+  const convertClassesToTimetable = useCallback((classesData) => {
+    // Define time slots mapping
+    const timeSlotMapping = {
+      '8am-9am': '8:00-9:00',
+      '9am-10am': '9:00-10:00',
+      '10am-11am': '10:00-11:00',
+      '11am-12pm': '11:00-12:00',
+      '12pm-1pm': '12:00-13:00',
+      '1pm-2pm': '13:00-14:00',
+      '2pm-3pm': '14:00-15:00',
+      '3pm-4pm': '15:00-16:00',
+      '4pm-5pm': '16:00-17:00',
+      '5pm-6pm': '17:00-18:00',
+      '6pm-7pm': '18:00-19:00',
+      '7pm-8pm': '19:00-20:00'
+    };
+
+    // Get all unique time slots from classes
+    const uniqueTimeSlots = [...new Set(classesData.map(cls => cls.time_slot).filter(Boolean))];
+    
+    // Create timetable structure
+    const timetable = uniqueTimeSlots.map(timeSlot => {
+      const formattedTime = timeSlotMapping[timeSlot] || timeSlot;
+      const days = {
+        Monday: null,
+        Tuesday: null,
+        Wednesday: null,
+        Thursday: null,
+        Friday: null,
+        Saturday: null,
+        Sunday: null
+      };
+
+      // Find classes for this time slot
+      const classesForTimeSlot = classesData.filter(cls => cls.time_slot === timeSlot);
+      
+      // Populate days with classes
+      classesForTimeSlot.forEach(cls => {
+        if (cls.day && days.hasOwnProperty(cls.day)) {
+          // Determine class type based on class name or code
+          let classType = 'lecture'; // Default type
+          const className = cls.name.toLowerCase();
+          const classCode = cls.code.toLowerCase();
+          
+          if (className.includes('lab') || classCode.includes('lab')) {
+            classType = 'lab';
+          } else if (className.includes('tutorial') || classCode.includes('tut')) {
+            classType = 'tutorial';
+          } else if (className.includes('seminar') || classCode.includes('sem')) {
+            classType = 'seminar';
+          }
+
+          days[cls.day] = {
+            type: classType,
+            content: `${cls.code} - ${cls.name}${cls.room ? ` (${cls.room})` : ''}`,
+            teacher: cls.teacher || 'TBA',
+            classId: cls.id,
+            room: cls.room
+          };
+        }
+      });
+
+      return {
+        time: formattedTime,
+        days
+      };
+    });
+
+    // Sort timetable by time
+    return timetable.sort((a, b) => {
+      const timeA = a.time.split('-')[0];
+      const timeB = b.time.split('-')[0];
+      return timeA.localeCompare(timeB);
+    });
+  }, []);
 
   // Initialize with default timetable if no data provided
   const getDefaultTimetable = useCallback(() => {
@@ -80,19 +160,29 @@ const Timetable = ({ timetableData, onTimetableUpdate, user }) => {
       try {
         const fetchedClasses = await getClasses();
         setClasses(fetchedClasses);
+        
+        // Convert classes to timetable format
+        if (fetchedClasses && fetchedClasses.length > 0) {
+          const convertedTimetable = convertClassesToTimetable(fetchedClasses);
+          setCurrentTimetable(convertedTimetable);
+        } else {
+          // Use default timetable if no classes found
+          setCurrentTimetable(getDefaultTimetable());
+        }
       } catch (error) {
         console.error("Failed to fetch classes:", error);
+        // Fallback to default timetable on error
+        setCurrentTimetable(getDefaultTimetable());
       }
     };
 
     fetchClasses();
 
+    // If timetableData is provided as prop, use it instead
     if (timetableData && timetableData.length > 0) {
       setCurrentTimetable(timetableData);
-    } else {
-      setCurrentTimetable(getDefaultTimetable());
     }
-  }, [timetableData, getDefaultTimetable]);
+  }, [timetableData, getDefaultTimetable, convertClassesToTimetable]);
 
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -164,6 +254,24 @@ const Timetable = ({ timetableData, onTimetableUpdate, user }) => {
     setShowModal(true);
   };
 
+  const handleRefreshTimetable = async () => {
+    try {
+      const fetchedClasses = await getClasses();
+      setClasses(fetchedClasses);
+      
+      // Convert classes to timetable format
+      if (fetchedClasses && fetchedClasses.length > 0) {
+        const convertedTimetable = convertClassesToTimetable(fetchedClasses);
+        setCurrentTimetable(convertedTimetable);
+      } else {
+        // Use default timetable if no classes found
+        setCurrentTimetable(getDefaultTimetable());
+      }
+    } catch (error) {
+      console.error("Failed to refresh timetable:", error);
+    }
+  };
+
   // Get unique values for filters
   const teachers = [...new Set(
     currentTimetable.flatMap(slot => 
@@ -220,6 +328,11 @@ const Timetable = ({ timetableData, onTimetableUpdate, user }) => {
             <p>View and manage your institution's timetable</p>
           </div>
 
+          {/* Teacher Notifications - Only show for teachers */}
+          {(currentUser?.role === 'teacher' || currentUser?.role === 'TEACHER') && (
+            <TeacherNotifications />
+          )}
+
           {/* AI Agent Component */}
           <AIAgent 
             onOptimize={handleOptimize}
@@ -260,6 +373,9 @@ const Timetable = ({ timetableData, onTimetableUpdate, user }) => {
         <div className="actions">
           <button className="btn btn-primary" onClick={handleGenerateClick}>
             <i className="fas fa-robot"></i> AI Optimize Schedule
+          </button>
+          <button className="btn btn-secondary" onClick={handleRefreshTimetable}>
+            <i className="fas fa-sync-alt"></i> Refresh from Classes
           </button>
           <button className="btn btn-secondary" onClick={handleExportTimetable}>
             <i className="fas fa-download"></i> Export CSV

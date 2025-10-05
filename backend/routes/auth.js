@@ -2,7 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { body, validationResult } from 'express-validator';
-import User from '../models/User.js';
+import { User } from '../models/User.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -133,4 +133,161 @@ router.get('/me', authenticateToken, async (req, res) => {
   }
 });
 
+// Get all teachers (users with role='teacher')
+router.get('/teachers', authenticateToken, async (req, res) => {
+  try {
+    const query = 'SELECT id, name, email FROM users WHERE role = $1 ORDER BY name';
+    const result = await (await import('../config/database.js')).default.query(query, ['teacher']);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get teachers error:', error);
+    res.status(500).json({ error: 'Failed to get teachers' });
+  }
+});
+
 export default router;
+// Get all users (admin only)
+router.get('/users', authenticateToken, async (req, res) => {
+  try {
+    // Check if user is admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    const query = 'SELECT id, name, email, role, created_at FROM users ORDER BY name';
+    const result = await User.findAll();
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({ error: 'Failed to get users' });
+  }
+});
+
+// Create user (admin only)
+router.post('/users', authenticateToken, [
+  body('email').isEmail().normalizeEmail(),
+  body('password').isLength({ min: 6 }),
+  body('name').optional().trim(),
+  body('role').optional().isIn(['teacher', 'admin'])
+], async (req, res) => {
+  try {
+    // Check if user is admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { email, password, name, role = 'teacher' } = req.body;
+    
+    // Check if user already exists
+    const existingUser = await User.findByEmail(email);
+    if (existingUser) {
+      return res.status(400).json({ error: 'User already exists' });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 12);
+    
+    // Create user
+    const user = await User.create({
+      email,
+      password: hashedPassword,
+      name: name || email.split('@')[0],
+      role
+    });
+
+    res.status(201).json({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role
+    });
+  } catch (error) {
+    console.error('Create user error:', error);
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+// Update user (admin only)
+router.put('/users/:id', authenticateToken, [
+  body('email').optional().isEmail().normalizeEmail(),
+  body('name').optional().trim(),
+  body('role').optional().isIn(['teacher', 'admin'])
+], async (req, res) => {
+  try {
+    // Check if user is admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { id } = req.params;
+    const { email, name, role, password } = req.body;
+    
+    // Check if user exists
+    const existingUser = await User.findById(id);
+    if (!existingUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Prepare update data
+    const updateData = {};
+    if (email) updateData.email = email;
+    if (name) updateData.name = name;
+    if (role) updateData.role = role;
+    if (password) updateData.password = await bcrypt.hash(password, 12);
+
+    // Update user
+    const updatedUser = await User.update(id, updateData);
+
+    res.json({
+      id: updatedUser.id,
+      email: updatedUser.email,
+      name: updatedUser.name,
+      role: updatedUser.role
+    });
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// Delete user (admin only)
+router.delete('/users/:id', authenticateToken, async (req, res) => {
+  try {
+    // Check if user is admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    const { id } = req.params;
+    
+    // Check if user exists
+    const existingUser = await User.findById(id);
+    if (!existingUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Don't allow admin to delete themselves
+    if (req.user.id === parseInt(id)) {
+      return res.status(400).json({ error: 'Cannot delete your own account' });
+    }
+
+    // Delete user
+    await User.delete(id);
+
+    res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+

@@ -1,14 +1,11 @@
 import express from 'express';
 import Faculty from '../models/Faculty.js';
-import { optionalAuth } from '../middleware/auth.js';
+import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Apply auth middleware to all routes
-router.use(optionalAuth);
-
-// Get all faculty
-router.get('/', async (req, res) => {
+// Get all faculty (accessible to all authenticated users)
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const faculty = await Faculty.getAll();
     res.json(faculty);
@@ -17,8 +14,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Create new faculty
-router.post('/', async (req, res) => {
+// Create new faculty (admin only)
+router.post('/', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const newFaculty = await Faculty.create(req.body);
     res.status(201).json(newFaculty);
@@ -27,8 +24,8 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update faculty
-router.put('/:id', async (req, res) => {
+// Update faculty (admin only)
+router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const updatedFaculty = await Faculty.update(req.params.id, req.body);
     if (!updatedFaculty) {
@@ -40,8 +37,8 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Delete faculty
-router.delete('/:id', async (req, res) => {
+// Delete faculty (admin only)
+router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const deleted = await Faculty.delete(req.params.id);
     if (!deleted) {

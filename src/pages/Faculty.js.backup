@@ -1,0 +1,261 @@
+// src/pages/Faculty.js
+import React, { useState, useEffect } from 'react';
+import Header from '../components/Header';
+import { useAuth } from '../context/AuthContext';
+import { getFaculty, createFaculty, updateFaculty, deleteFaculty } from '../api';
+import '../styles/Dashboard.css';
+import '../styles/EnhancedComponents.css';
+
+const Faculty = () => {
+  const { currentUser } = useAuth();
+  const [faculty, setFaculty] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingTeacher, setEditingTeacher] = useState(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    subject: '',
+    availability: {}
+  });
+
+  // Check if user is admin
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'ADMIN';
+
+  const fetchFaculty = async () => {
+    try {
+      setLoading(true);
+      const fetchedFaculty = await getFaculty();
+      setFaculty(fetchedFaculty);
+    } catch (err) {
+      setError('Failed to fetch faculty.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFaculty();
+  }, []);
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!isAdmin) {
+      setError('Only administrators can modify faculty.');
+      return;
+    }
+    try {
+      if (editingTeacher) {
+        const updated = await updateFaculty(editingTeacher.id, formData);
+        setFaculty(faculty.map(f => (f.id === editingTeacher.id ? updated : f)));
+      } else {
+        const newFaculty = await createFaculty(formData);
+        setFaculty([...faculty, newFaculty]);
+      }
+      resetForm();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to save faculty member.');
+      console.error(err);
+    }
+  };
+
+  const handleEdit = (teacher) => {
+    if (!isAdmin) {
+      setError('Only administrators can edit faculty.');
+      return;
+    }
+    setEditingTeacher(teacher);
+    setFormData(teacher);
+    setShowForm(true);
+  };
+
+  const handleDelete = async (id) => {
+    if (!isAdmin) {
+      setError('Only administrators can delete faculty.');
+      return;
+    }
+    if (window.confirm('Are you sure you want to delete this faculty member?')) {
+      try {
+        await deleteFaculty(id);
+        setFaculty(faculty.filter(f => f.id !== id));
+      } catch (err) {
+        setError(err.response?.data?.error || 'Failed to delete faculty member.');
+        console.error(err);
+      }
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({ name: '', email: '', subject: '', availability: {} });
+    setEditingTeacher(null);
+    setShowForm(false);
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Active': return 'success';
+      case 'On Leave': return 'warning';
+      case 'Inactive': return 'danger';
+      default: return 'secondary';
+    }
+  };
+
+  return (
+    <div className="dashboard-container">
+      <Header user={currentUser} />
+      <div className="dashboard-content">
+        <div className="page faculty-page">
+          <div className="page-header">
+            <h2>Faculty Management</h2>
+            <p>Manage all teaching faculty members and their details</p>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <h3>Faculty Members</h3>
+              {isAdmin && (
+                <button 
+                  className="btn btn-primary"
+                  onClick={() => setShowForm(true)}
+                >
+                  <i className="fas fa-plus"></i> Add New Faculty
+                </button>
+              )}
+            </div>
+
+            {showForm && (
+              <div className="modal-overlay">
+                <div className="modal-content">
+                  <div className="modal-header">
+                    <h3>{editingTeacher ? 'Edit Faculty Member' : 'Add New Faculty Member'}</h3>
+                    <button 
+                      className="btn-icon"
+                      onClick={() => {
+                        setShowForm(false);
+                        setEditingTeacher(null);
+                        setFormData({ name: '', email: '', phone: '', department: '', subjects: '', status: 'Active' });
+                      }}
+                    >
+                      <i className="fas fa-times"></i>
+                    </button>
+                  </div>
+                  
+                  <form onSubmit={handleSubmit}>
+                    <div className="form-group">
+                      <label>Full Name</label>
+                      <input
+                        type="text"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleInputChange}
+                        required
+                        placeholder="e.g., Dr. Smith"
+                      />
+                    </div>
+                    
+                    <div className="form-group">
+                      <label>Email Address</label>
+                      <input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        required
+                        placeholder="e.g., smith@school.edu"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label>Subject</label>
+                      <input
+                        type="text"
+                        name="subject"
+                        value={formData.subject}
+                        onChange={handleInputChange}
+                        placeholder="e.g., Computer Science"
+                      />
+                    </div>
+                    
+                    <div className="form-actions">
+                      <button 
+                        type="button" 
+                        className="btn btn-secondary"
+                        onClick={resetForm}
+                      >
+                        Cancel
+                      </button>
+                      <button type="submit" className="btn btn-primary">
+                        {editingTeacher ? 'Update Faculty' : 'Add Faculty'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            <div className="table-container">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    
+                    <th>Subject</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {faculty.map(teacher => (
+                    <tr key={teacher.id}>
+                      <td>{teacher.name}</td>
+                      <td>{teacher.email}</td>
+                      <td>{teacher.subject}</td>
+                      <td>
+                        {isAdmin ? (
+                          <div className="action-buttons">
+                            <button 
+                              className="btn-icon"
+                              onClick={() => handleEdit(teacher)}
+                              title="Edit"
+                            >
+                              <i className="fas fa-edit"></i>
+                            </button>
+                            <button 
+                              className="btn-icon"
+                              onClick={() => handleDelete(teacher.id)}
+                              title="Delete"
+                            >
+                              <i className="fas fa-trash"></i>
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-muted">View Only</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              
+              {faculty.length === 0 && (
+                <div className="empty-state">
+                  <i className="fas fa-users"></i>
+                  <p>No faculty members found. Add your first faculty member to get started.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Faculty;

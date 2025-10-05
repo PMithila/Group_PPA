@@ -8,7 +8,7 @@ import schedulerRoutes from './routes/scheduler.js';
 import classRoutes from './routes/classes.js';
 import facultyRoutes from './routes/faculty.js';
 import labRoutes from './routes/labs.js';
-import User from './models/User.js';
+import { User } from './models/User.js';
 import Class from './models/Class.js';
 import Faculty from './models/Faculty.js';
 import Lab from './models/Lab.js';
@@ -77,10 +77,42 @@ const initializeDatabase = async () => {
     await Class.createTable();
     await Faculty.createTable();
     await Lab.createTable();
+    
+    // Run migrations for existing tables
+    await runMigrations();
+    
     console.log('Database tables created or already exist.');
   } catch (error) {
     console.error('Database initialization error:', error);
     process.exit(1); // Exit if database initialization fails
+  }
+};
+
+// Function to run database migrations
+const runMigrations = async () => {
+  try {
+    // Add day and time_slot columns to classes table if they don't exist
+    const checkQuery = `
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='classes' 
+      AND column_name IN ('day', 'time_slot');
+    `;
+    const result = await pool.query(checkQuery);
+    const existingColumns = result.rows.map(row => row.column_name);
+    
+    if (!existingColumns.includes('day')) {
+      await pool.query('ALTER TABLE classes ADD COLUMN day VARCHAR(50)');
+      console.log('✓ Added "day" column to classes table');
+    }
+    
+    if (!existingColumns.includes('time_slot')) {
+      await pool.query('ALTER TABLE classes ADD COLUMN time_slot VARCHAR(50)');
+      console.log('✓ Added "time_slot" column to classes table');
+    }
+  } catch (error) {
+    console.error('Migration error:', error);
+    // Don't exit on migration errors, just log them
   }
 };
 

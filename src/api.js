@@ -102,3 +102,30 @@ export async function deleteLab(id) {
   const res = await instance.delete(`/api/labs/${id}`);
   return res.data;
 }
+
+// Teachers API (from users)
+export async function getTeachers() {
+  const res = await instance.get("/auth/teachers");
+  return res.data;
+}
+
+// User Management API
+export async function getUsers() {
+  const res = await instance.get("/auth/users");
+  return res.data;
+}
+
+export async function createUser(userData) {
+  const res = await instance.post("/auth/users", userData);
+  return res.data;
+}
+
+export async function updateUser(id, userData) {
+  const res = await instance.put(`/auth/users/${id}`, userData);
+  return res.data;
+}
+
+export async function deleteUser(id) {
+  const res = await instance.delete(`/auth/users/${id}`);
+  return res.data;
+}

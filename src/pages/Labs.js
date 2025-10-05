@@ -4,6 +4,7 @@ import Header from '../components/Header';
 import { useAuth } from '../context/AuthContext';
 import { getLabs, createLab, updateLab, deleteLab } from '../api';
 import '../styles/Dashboard.css';
+import '../styles/EnhancedComponents.css';
 
 const Labs = () => {
   const { currentUser } = useAuth();
@@ -18,9 +19,12 @@ const Labs = () => {
     resources: []
   });
 
+  // Check if user is admin
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'ADMIN';
+
   const fetchLabs = async () => {
     try {
-      setLoading(true);
+      setLoading(false);
       const fetchedLabs = await getLabs();
       setLabs(fetchedLabs);
     } catch (err) {
@@ -47,6 +51,10 @@ const Labs = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isAdmin) {
+      setError('Only administrators can modify labs.');
+      return;
+    }
     try {
       if (editingLab) {
         const updated = await updateLab(editingLab.id, formData);
@@ -57,24 +65,32 @@ const Labs = () => {
       }
       resetForm();
     } catch (err) {
-      setError('Failed to save lab.');
+      setError(err.response?.data?.error || 'Failed to save lab.');
       console.error(err);
     }
   };
 
   const handleEdit = (lab) => {
+    if (!isAdmin) {
+      setError('Only administrators can edit labs.');
+      return;
+    }
     setEditingLab(lab);
     setFormData(lab);
     setShowForm(true);
   };
 
   const handleDelete = async (id) => {
+    if (!isAdmin) {
+      setError('Only administrators can delete labs.');
+      return;
+    }
     if (window.confirm('Are you sure you want to delete this lab?')) {
       try {
         await deleteLab(id);
         setLabs(labs.filter(l => l.id !== id));
       } catch (err) {
-        setError('Failed to delete lab.');
+        setError(err.response?.data?.error || 'Failed to delete lab.');
         console.error(err);
       }
     }
@@ -86,14 +102,6 @@ const Labs = () => {
     setShowForm(false);
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'Available': return 'success';
-      case 'Occupied': return 'warning';
-      case 'Maintenance': return 'danger';
-      default: return 'secondary';
-    }
-  };
 
   return (
     <div className="dashboard-container">
@@ -108,12 +116,14 @@ const Labs = () => {
           <div className="card">
             <div className="card-header">
               <h3>Laboratories</h3>
-              <button 
-                className="btn btn-primary"
-                onClick={() => setShowForm(true)}
-              >
-                <i className="fas fa-plus"></i> Add New Lab
-              </button>
+              {isAdmin && (
+                <button 
+                  className="btn btn-primary"
+                  onClick={() => setShowForm(true)}
+                >
+                  <i className="fas fa-plus"></i> Add New Lab
+                </button>
+              )}
             </div>
 
             {showForm && (
@@ -181,22 +191,24 @@ const Labs = () => {
                         <span>Resources: {Array.isArray(lab.resources) ? lab.resources.join(', ') : ''}</span>
                       </div>
                     </div>
-                    <div className="lab-card-actions">
-                      <button 
-                        className="btn-icon"
-                        onClick={() => handleEdit(lab)}
-                        title="Edit"
-                      >
-                        <i className="fas fa-edit"></i>
-                      </button>
-                      <button 
-                        className="btn-icon"
-                        onClick={() => handleDelete(lab.id)}
-                        title="Delete"
-                      >
-                        <i className="fas fa-trash"></i>
-                      </button>
-                    </div>
+                    {isAdmin && (
+                      <div className="lab-card-actions">
+                        <button 
+                          className="btn-icon"
+                          onClick={() => handleEdit(lab)}
+                          title="Edit"
+                        >
+                          <i className="fas fa-edit"></i>
+                        </button>
+                        <button 
+                          className="btn-icon"
+                          onClick={() => handleDelete(lab.id)}
+                          title="Delete"
+                        >
+                          <i className="fas fa-trash"></i>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))
               )}

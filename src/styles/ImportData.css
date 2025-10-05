@@ -1,0 +1,108 @@
+/* Import Data Styles */
+.read-only-info {
+  padding: 20px;
+}
+
+.info-card {
+  background: #f7fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 25px;
+  text-align: center;
+}
+
+.info-card i {
+  font-size: 2.5rem;
+  color: #4299e1;
+  margin-bottom: 15px;
+}
+
+.info-card h4 {
+  margin: 0 0 15px 0;
+  color: #2d3748;
+  font-size: 1.3rem;
+}
+
+.info-card p {
+  margin: 0 0 15px 0;
+  color: #4a5568;
+  line-height: 1.6;
+}
+
+.info-card ul {
+  text-align: left;
+  margin: 0;
+  padding-left: 20px;
+  color: #4a5568;
+}
+
+.info-card li {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.template-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.template-info {
+  margin-bottom: 20px;
+}
+
+.template-info h4 {
+  margin: 0 0 10px 0;
+  color: #2d3748;
+  font-size: 1.2rem;
+}
+
+.template-info p {
+  margin: 0 0 15px 0;
+  color: #4a5568;
+  line-height: 1.6;
+}
+
+.template-features {
+  background: #fffaf0;
+  border: 1px solid #f6e05e;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.template-features h5 {
+  margin: 0 0 15px 0;
+  color: #744210;
+  font-size: 1.1rem;
+}
+
+.template-features ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #744210;
+}
+
+.template-features li {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.template-features i {
+  color: #38a169;
+  margin-right: 8px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .info-card {
+    padding: 20px;
+  }
+  
+  .info-card i {
+    font-size: 2rem;
+  }
+  
+  .template-features {
+    padding: 15px;
+  }
+}

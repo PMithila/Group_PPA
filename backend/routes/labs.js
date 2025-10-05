@@ -1,14 +1,11 @@
 import express from 'express';
 import Lab from '../models/Lab.js';
-import { optionalAuth } from '../middleware/auth.js';
+import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Apply auth middleware to all routes
-router.use(optionalAuth);
-
-// Get all labs
-router.get('/', async (req, res) => {
+// Get all labs (accessible to all authenticated users)
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const labs = await Lab.getAll();
     res.json(labs);
@@ -17,8 +14,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Create a new lab
-router.post('/', async (req, res) => {
+// Create a new lab (admin only)
+router.post('/', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const newLab = await Lab.create(req.body);
     res.status(201).json(newLab);
@@ -27,8 +24,8 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update a lab
-router.put('/:id', async (req, res) => {
+// Update a lab (admin only)
+router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const updatedLab = await Lab.update(req.params.id, req.body);
     if (!updatedLab) {
@@ -40,8 +37,8 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Delete a lab
-router.delete('/:id', async (req, res) => {
+// Delete a lab (admin only)
+router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     await Lab.delete(req.params.id);
     res.status(204).send();

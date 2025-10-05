@@ -7,9 +7,13 @@ import UploadArea from '../components/UploadArea';
 import Header from '../components/Header';
 import { useAuth } from '../context/AuthContext';
 import '../styles/Dashboard.css';
+import '../styles/ImportData.css';
 
 const ImportData = ({ onDataUpload }) => {
   const { currentUser } = useAuth();
+  
+  // Check if user is admin
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'ADMIN';
   const [uploadState, setUploadState] = useState({
     status: 'idle', // 'idle', 'uploading', 'success', 'error'
     message: '',
@@ -164,32 +168,65 @@ const ImportData = ({ onDataUpload }) => {
       <div className="dashboard-content">
         <div className="page import-data-page">
           <div className="page-header">
-            <h2>Import Timetable Data</h2>
-            <p>Upload Excel files to import teachers, subjects, classrooms, and constraints</p>
+            <h2>{isAdmin ? 'Import Timetable Data' : 'Data Import Information'}</h2>
+            <p>
+              {isAdmin 
+                ? 'Upload Excel files to import teachers, subjects, classrooms, and constraints'
+                : 'View information about data import templates and requirements'
+              }
+            </p>
           </div>
 
           <div className="import-container">
             {/* Upload Section */}
             <div className="upload-section card">
               <div className="card-header">
-                <h3>Upload Data File</h3>
-                <p>Download the template and fill in your institutional data</p>
+                <h3>{isAdmin ? 'Upload Data File' : 'Data Import Process'}</h3>
+                <p>
+                  {isAdmin 
+                    ? 'Download the template and fill in your institutional data'
+                    : 'Learn about the data import process and template requirements'
+                  }
+                </p>
               </div>
               
               <div className="card-body">
-                <UploadArea
-                  onFileUpload={handleFileUpload}
-                  uploadState={uploadState}
-                  onReset={handleReset}
-                />
+                {isAdmin ? (
+                  <UploadArea
+                    onFileUpload={handleFileUpload}
+                    uploadState={uploadState}
+                    onReset={handleReset}
+                  />
+                ) : (
+                  <div className="read-only-info">
+                    <div className="info-card">
+                      <i className="fas fa-info-circle"></i>
+                      <h4>Data Import Process</h4>
+                      <p>Administrators can import institutional data using Excel templates. This includes:</p>
+                      <ul>
+                        <li>Teacher information and availability</li>
+                        <li>Subject details and requirements</li>
+                        <li>Classroom specifications</li>
+                        <li>Scheduling constraints</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
                 
                 <div className="template-section">
                   <div className="template-info">
-                    <h4>Download Template</h4>
-                    <p>Use our comprehensive template to ensure your data is formatted correctly with all required fields.</p>
-                    <button className="btn btn-primary" onClick={handleSampleDownload}>
-                      <i className="fas fa-download"></i> Download Excel Template
-                    </button>
+                    <h4>{isAdmin ? 'Download Template' : 'Template Information'}</h4>
+                    <p>
+                      {isAdmin 
+                        ? 'Use our comprehensive template to ensure your data is formatted correctly with all required fields.'
+                        : 'The system uses comprehensive Excel templates to ensure data is formatted correctly.'
+                      }
+                    </p>
+                    {isAdmin && (
+                      <button className="btn btn-primary" onClick={handleSampleDownload}>
+                        <i className="fas fa-download"></i> Download Excel Template
+                      </button>
+                    )}
                   </div>
                   
                   <div className="template-features">

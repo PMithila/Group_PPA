@@ -61,6 +61,9 @@ export const AuthProvider = ({ children }) => {
         const token = data.access_token;
         localStorage.setItem('stms_token', token);
         
+        // IMPORTANT: Set token in axios instance
+        setApiToken(token);
+        
         // Get user info
         const userResponse = await fetch(`${API_BASE_URL}/auth/me`, {
           headers: {
@@ -113,6 +116,9 @@ export const AuthProvider = ({ children }) => {
         const data = await response.json();
         const token = data.access_token;
         localStorage.setItem('stms_token', token);
+        
+        // IMPORTANT: Set token in axios instance
+        setApiToken(token);
         
         const newUser = {
           id: Date.now(),

@@ -1,10 +1,10 @@
 import express from 'express';
 import Class from '../models/Class.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Get all classes
+// Get all classes (accessible to all authenticated users)
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const classes = await Class.getAll();
@@ -14,8 +14,8 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
-// Create a new class
-router.post('/', authenticateToken, async (req, res) => {
+// Create a new class (admin only)
+router.post('/', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const newClass = await Class.create(req.body);
     res.status(201).json(newClass);
@@ -24,8 +24,8 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 });
 
-// Update a class
-router.put('/:id', authenticateToken, async (req, res) => {
+// Update a class (admin only)
+router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const updatedClass = await Class.update(req.params.id, req.body);
     if (!updatedClass) {
@@ -37,8 +37,8 @@ router.put('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Delete a class
-router.delete('/:id', authenticateToken, async (req, res) => {
+// Delete a class (admin only)
+router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     await Class.delete(req.params.id);
     res.status(204).send();

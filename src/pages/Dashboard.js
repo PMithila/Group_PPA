@@ -5,15 +5,18 @@ import Header from '../components/Header';
 import DashboardCards from '../components/DashboardCards';
 import QuickActions from '../components/QuickActions';
 import RecentActivities from '../components/RecentActivities';
+import TeacherNotifications from '../components/TeacherNotifications';
 import AnimatedBackground from '../components/AnimatedBackground';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { ToastContainer } from '../components/Toast';
 import { useToast } from '../hooks/useToast';
+import { useAuth } from '../context/AuthContext';
 import '../styles/Dashboard.css';
 
-const Dashboard = () => {
+const AdminDashboard = () => {
   const navigate = useNavigate();
   const { toasts } = useToast();
+  const { currentUser } = useAuth();
   const [dashboardData, setDashboardData] = useState({
     totalClasses: 0,
     totalTeachers: 0,
@@ -48,7 +51,16 @@ const Dashboard = () => {
     }
   ]);
 
+  // Check if user is admin
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'ADMIN';
+
   useEffect(() => {
+    // Redirect teachers to their dashboard
+    if (currentUser && !isAdmin) {
+      navigate('/teacher-dashboard');
+      return;
+    }
+
     const loadInitialData = async () => {
       setLoading(true);
       
@@ -146,14 +158,30 @@ const Dashboard = () => {
     };
 
     loadInitialData();
-  }, [notifications]);
+  }, [notifications, currentUser, isAdmin, navigate]);
 
   if (loading) {
     return (
       <div className="dashboard-page">
         <AnimatedBackground variant="dashboard" />
         <div className="loading-container">
-          <LoadingSpinner size="large" text="Loading your dashboard..." />
+          <LoadingSpinner size="large" text="Loading admin dashboard..." />
+        </div>
+      </div>
+    );
+  }
+
+  // Show access denied for non-admin users
+  if (!isAdmin) {
+    return (
+      <div className="dashboard-page">
+        <AnimatedBackground variant="dashboard" />
+        <div className="loading-container">
+          <div style={{ textAlign: 'center', color: '#e53e3e' }}>
+            <i className="fas fa-lock" style={{ fontSize: '3rem', marginBottom: '20px' }}></i>
+            <h2>Access Denied</h2>
+            <p>You don't have permission to access the admin dashboard.</p>
+          </div>
         </div>
       </div>
     );
@@ -257,4 +285,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default AdminDashboard;
