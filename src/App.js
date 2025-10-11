@@ -10,7 +10,9 @@ import Faculty from './pages/Faculty';
 import Labs from './pages/Labs';
 import ImportData from './pages/ImportData';
 import Timetable from './pages/Timetable';
-import './App.css';
+import Subjects from './pages/Subjects';
+import Departments from './pages/Departments';
+// Removed old CSS import - using Tailwind CSS now
 
 const ProtectedRoute = ({ children }) => {
   const { currentUser } = useAuth();
@@ -126,6 +128,22 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Timetable />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/subjects" 
+              element={
+                <ProtectedRoute>
+                  <Subjects />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/departments" 
+              element={
+                <ProtectedRoute>
+                  <Departments />
                 </ProtectedRoute>
               } 
             />

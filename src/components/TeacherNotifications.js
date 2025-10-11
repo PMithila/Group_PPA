@@ -1,9 +1,9 @@
 // Teacher Notification Component
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { teacherNotificationService } from '../services/teacherNotificationService';
 import { useToast } from '../hooks/useToast';
-import './TeacherNotifications.css';
+// Removed old CSS import - using Tailwind CSS now
 
 const TeacherNotifications = () => {
   const { currentUser } = useAuth();
@@ -11,10 +11,25 @@ const TeacherNotifications = () => {
   const [notifications, setNotifications] = useState([]);
   const [todaysClasses, setTodaysClasses] = useState([]);
   const [isMonitoring, setIsMonitoring] = useState(false);
-  const [conflicts, setConflicts] = useState([]);
 
   // Check if user is a teacher
   const isTeacher = currentUser?.role === 'teacher' || currentUser?.role === 'TEACHER';
+
+  const loadTodaysClasses = useCallback(async () => {
+    if (!currentUser?.name) return;
+    
+    try {
+      const classes = await teacherNotificationService.getTodaysClasses(currentUser.name);
+      setTodaysClasses(classes);
+    } catch (error) {
+      console.error('Failed to load today\'s classes:', error);
+    }
+  }, [currentUser?.name]);
+
+  // Schedule conflict feature removed per requirements
+  const checkConflicts = useCallback(async () => {
+    // Conflicts feature disabled
+  }, []);
 
   useEffect(() => {
     if (!isTeacher || !currentUser?.name) return;
@@ -22,8 +37,7 @@ const TeacherNotifications = () => {
     // Load today's classes
     loadTodaysClasses();
     
-    // Check for conflicts
-    checkConflicts();
+    // Conflicts disabled
 
     // Subscribe to notifications
     const unsubscribe = teacherNotificationService.subscribe((notification) => {
@@ -46,29 +60,7 @@ const TeacherNotifications = () => {
       unsubscribe();
       teacherNotificationService.stopMonitoring();
     };
-  }, [isTeacher, currentUser?.name]);
-
-  const loadTodaysClasses = async () => {
-    if (!currentUser?.name) return;
-    
-    try {
-      const classes = await teacherNotificationService.getTodaysClasses(currentUser.name);
-      setTodaysClasses(classes);
-    } catch (error) {
-      console.error('Failed to load today\'s classes:', error);
-    }
-  };
-
-  const checkConflicts = async () => {
-    if (!currentUser?.name) return;
-    
-    try {
-      const conflicts = await teacherNotificationService.checkClassConflicts(currentUser.name);
-      setConflicts(conflicts);
-    } catch (error) {
-      console.error('Failed to check conflicts:', error);
-    }
-  };
+  }, [isTeacher, currentUser?.name, loadTodaysClasses, checkConflicts, warning, info]);
 
   const startMonitoring = () => {
     if (!currentUser?.name) return;
@@ -159,10 +151,17 @@ const TeacherNotifications = () => {
         <div className="next-class-card">
           <div className="card-header">
             <i className="fas fa-clock"></i>
-            <span>Next Class</span>
+            <span>Next {nextClass.type === 'lab' ? 'Lab' : 'Class'}</span>
           </div>
           <div className="card-content">
-            <h4>{nextClass.code} - {nextClass.name}</h4>
+            <h4>
+              {nextClass.code || nextClass.name}
+              {nextClass.type === 'lab' && (
+                <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">
+                  Lab
+                </span>
+              )}
+            </h4>
             <p className="class-time">{formatTimeSlot(nextClass.time_slot)}</p>
             <p className="class-room">Room: {nextClass.room || 'TBA'}</p>
           </div>
@@ -181,28 +180,19 @@ const TeacherNotifications = () => {
               <div key={cls.id} className="class-item">
                 <div className="class-time">{formatTimeSlot(cls.time_slot)}</div>
                 <div className="class-details">
-                  <div className="class-name">{cls.code} - {cls.name}</div>
+                  <div className="class-name">
+                    {cls.code || cls.name}
+                    {cls.type === 'lab' && (
+                      <span className="ml-2 px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">
+                        Lab
+                      </span>
+                    )}
+                  </div>
                   <div className="class-room">{cls.room || 'TBA'}</div>
                 </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Conflicts */}
-      {conflicts.length > 0 && (
-        <div className="conflicts-section">
-          <h4>
-            <i className="fas fa-exclamation-triangle"></i>
-            Schedule Conflicts
-          </h4>
-          {conflicts.map((conflict, index) => (
-            <div key={index} className="conflict-item">
-              <i className="fas fa-warning"></i>
-              <span>{conflict.message}</span>
-            </div>
-          ))}
         </div>
       )}
 

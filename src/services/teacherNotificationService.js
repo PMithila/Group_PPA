@@ -1,5 +1,5 @@
 // Teacher Notification Service
-import { getClasses } from '../api';
+import { getClasses, getLabSessions } from '../api';
 
 export class TeacherNotificationService {
   constructor() {
@@ -24,37 +24,47 @@ export class TeacherNotificationService {
   // Check for upcoming classes for a specific teacher
   async checkUpcomingClasses(teacherName, checkMinutes = 15) {
     try {
-      const classes = await getClasses();
+      // Fetch both classes and labs
+      const [classes, labs] = await Promise.all([
+        getClasses(),
+        getLabSessions()
+      ]);
+
       const now = new Date();
       const checkTime = new Date(now.getTime() + (checkMinutes * 60 * 1000));
-      
-      const upcomingClasses = classes.filter(cls => {
-        if (!cls.teacher || cls.teacher !== teacherName || !cls.day || !cls.time_slot) {
+
+      const allSessions = [
+        ...classes.map(cls => ({ ...cls, type: 'class' })),
+        ...labs.map(lab => ({ ...lab, type: 'lab' }))
+      ];
+
+      const upcomingSessions = allSessions.filter(session => {
+        if (!session.teacher || session.teacher !== teacherName || !session.day || !session.time_slot) {
           return false;
         }
 
-        // Check if class is today
+        // Check if session is today
         const today = now.toLocaleDateString('en-US', { weekday: 'long' });
-        if (cls.day !== today) {
+        if (session.day !== today) {
           return false;
         }
 
         // Parse time slot to check if it's within the notification window
-        const classTime = this.parseTimeSlot(cls.time_slot);
-        if (!classTime) {
+        const sessionTime = this.parseTimeSlot(session.time_slot);
+        if (!sessionTime) {
           return false;
         }
 
-        const classDateTime = new Date();
-        classDateTime.setHours(classTime.hours, classTime.minutes, 0, 0);
+        const sessionDateTime = new Date();
+        sessionDateTime.setHours(sessionTime.hours, sessionTime.minutes, 0, 0);
 
-        // Check if class is within the notification window
-        return classDateTime >= now && classDateTime <= checkTime;
+        // Check if session is within the notification window
+        return sessionDateTime >= now && sessionDateTime <= checkTime;
       });
 
-      return upcomingClasses;
+      return upcomingSessions;
     } catch (error) {
-      console.error('Error checking upcoming classes:', error);
+      console.error('Error checking upcoming sessions:', error);
       return [];
     }
   }
@@ -79,40 +89,44 @@ export class TeacherNotificationService {
     return timeMapping[timeSlot] || null;
   }
 
-  // Start monitoring for upcoming classes
   startMonitoring(teacherName, checkIntervalMinutes = 5, notificationMinutes = 15) {
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
     }
 
-    this.checkInterval = setInterval(async () => {
+    const checkForUpcomingClasses = async () => {
       const upcomingClasses = await this.checkUpcomingClasses(teacherName, notificationMinutes);
-      
+
       upcomingClasses.forEach(cls => {
         const classId = `${cls.id}-${cls.time_slot}`;
-        
+
         // Only notify if we haven't already notified for this class
         if (!this.lastCheckedClasses.has(classId)) {
           this.lastCheckedClasses.add(classId);
-          
+
           const classTime = this.parseTimeSlot(cls.time_slot);
           const classDateTime = new Date();
           classDateTime.setHours(classTime.hours, classTime.minutes, 0, 0);
-          
+
           const timeUntilClass = Math.round((classDateTime - new Date()) / (1000 * 60));
-          
+
+          const sessionType = cls.type === 'lab' ? 'Lab' : 'Class';
+          const sessionCode = cls.code || cls.name;
+
           this.notify({
             id: classId,
             type: 'class_reminder',
-            title: 'Upcoming Class',
-            message: `You have ${cls.code} - ${cls.name} in ${timeUntilClass} minutes at ${cls.room || 'TBA'}`,
-            classData: cls,
+            title: `Upcoming ${sessionType}`,
+            message: `You have ${sessionType} "${sessionCode}" in ${timeUntilClass} minutes at ${cls.room || 'TBA'}`,
+            sessionData: cls,
             timeUntilClass,
             timestamp: new Date()
           });
         }
       });
-    }, checkIntervalMinutes * 60 * 1000);
+    };
+
+    this.checkInterval = setInterval(checkForUpcomingClasses, checkIntervalMinutes * 60 * 1000);
   }
 
   // Stop monitoring
@@ -127,19 +141,28 @@ export class TeacherNotificationService {
   // Get today's classes for a teacher
   async getTodaysClasses(teacherName) {
     try {
-      const classes = await getClasses();
+      // Fetch both classes and labs
+      const [classes, labs] = await Promise.all([
+        getClasses(),
+        getLabSessions()
+      ]);
+
       const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-      
-      return classes.filter(cls => 
-        cls.teacher === teacherName && cls.day === today
-      ).sort((a, b) => {
+
+      // Combine classes and labs
+      const allSessions = [
+        ...classes.filter(cls => cls.teacher === teacherName && cls.day === today),
+        ...labs.filter(lab => lab.teacher === teacherName && lab.day === today)
+      ];
+
+      return allSessions.sort((a, b) => {
         const timeA = this.parseTimeSlot(a.time_slot);
         const timeB = this.parseTimeSlot(b.time_slot);
         if (!timeA || !timeB) return 0;
         return (timeA.hours * 60 + timeA.minutes) - (timeB.hours * 60 + timeB.minutes);
       });
     } catch (error) {
-      console.error('Error fetching today\'s classes:', error);
+      console.error('Error fetching today\'s sessions:', error);
       return [];
     }
   }
@@ -149,13 +172,13 @@ export class TeacherNotificationService {
     try {
       const classes = await getClasses();
       const teacherClasses = classes.filter(cls => cls.teacher === teacherName);
-      
+
       const conflicts = [];
       const timeSlots = {};
 
       teacherClasses.forEach(cls => {
         if (!cls.day || !cls.time_slot) return;
-        
+
         const key = `${cls.day}-${cls.time_slot}`;
         if (timeSlots[key]) {
           conflicts.push({

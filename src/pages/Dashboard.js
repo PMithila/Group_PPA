@@ -5,17 +5,17 @@ import Header from '../components/Header';
 import DashboardCards from '../components/DashboardCards';
 import QuickActions from '../components/QuickActions';
 import RecentActivities from '../components/RecentActivities';
-import TeacherNotifications from '../components/TeacherNotifications';
+// import TeacherNotifications from '../components/TeacherNotifications'; // Unused for now
 import AnimatedBackground from '../components/AnimatedBackground';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { ToastContainer } from '../components/Toast';
 import { useToast } from '../hooks/useToast';
 import { useAuth } from '../context/AuthContext';
-import '../styles/Dashboard.css';
+// Removed old CSS import - using Tailwind CSS now
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const { toasts } = useToast();
+  const { toasts, removeToast } = useToast();
   const { currentUser } = useAuth();
   const [dashboardData, setDashboardData] = useState({
     totalClasses: 0,
@@ -188,7 +188,7 @@ const AdminDashboard = () => {
   }
 
   return (
-    <div className="dashboard-page">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <AnimatedBackground variant="dashboard" />
       <Header 
         notifications={notifications}
@@ -198,89 +198,121 @@ const AdminDashboard = () => {
         onSettingsClick={() => navigate('/settings')}
         onLogoClick={() => navigate('/dashboard')}
       />
-      <div className="dashboard-container">
-        <div className="dashboard-content">
-          <div className="dashboard-main">
-            <div className="dashboard-header">
-              <h1>Dashboard</h1>
-              <p>Welcome back! Here's what's happening with your schedule today.</p>
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          {/* Main Content */}
+          <div className="lg:col-span-3 space-y-8">
+            {/* Header */}
+            <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg border border-white/20 p-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-4xl font-bold bg-gradient-to-r from-primary-600 to-primary-700 bg-clip-text text-transparent mb-2">
+                    Dashboard
+                  </h1>
+                  <p className="text-slate-600 text-lg">
+                    Welcome back, {currentUser?.name || 'Admin'}! Here's what's happening with your schedule today.
+                  </p>
+                </div>
+                <div className="hidden md:flex items-center space-x-4">
+                  <div className="text-right">
+                    <p className="text-sm text-slate-500">Last updated</p>
+                    <p className="text-lg font-semibold text-slate-800">
+                      {new Date().toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="w-12 h-12 bg-gradient-to-r from-primary-500 to-primary-600 rounded-2xl flex items-center justify-center">
+                    <i className="fas fa-calendar-check text-white text-xl"></i>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="dashboard-cards">
+
+            {/* Cards */}
+            <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg border border-white/20 p-8">
               <DashboardCards 
-              timetableData={dashboardData.upcomingClasses}
-              teachers={[
-                { id: 1, name: 'Dr. Smith', department: 'Computer Science' },
-                { id: 2, name: 'Prof. Johnson', department: 'Physics' },
-                { id: 3, name: 'Prof. Davis', department: 'Mathematics' },
-                { id: 4, name: 'Dr. Williams', department: 'English' },
-                { id: 5, name: 'Dr. Wilson', department: 'Chemistry' }
-              ]}
-              classrooms={[
-                { id: 1, name: 'Room A12', capacity: 50, type: 'lecture' },
-                { id: 2, name: 'Room B5', capacity: 30, type: 'tutorial' },
-                { id: 3, name: 'Room C10', capacity: 40, type: 'lecture' },
-                { id: 4, name: 'Room D2', capacity: 35, type: 'lecture' },
-                { id: 5, name: 'Lab 1', capacity: 25, type: 'lab' },
-                { id: 6, name: 'Lab 2', capacity: 25, type: 'lab' },
-                { id: 7, name: 'Lab 3', capacity: 20, type: 'lab' }
-              ]}
-              subjects={[
-                'CS101', 'PHY101', 'MATH101', 'ENG101', 'CHEM101', 
-                'BIO101', 'HIST101', 'GEOG101', 'ECON101', 'PSYC101'
-              ]}
-              conflicts={0}
-              onCardClick={(cardId, action) => {
-                console.log(`Card clicked: ${cardId}, Action: ${action}`);
-                // Navigate based on card type
-                switch(cardId) {
-                  case 'classes':
-                    navigate('/classes');
-                    break;
-                  case 'labs':
-                    navigate('/labs');
-                    break;
-                  case 'faculty':
-                    navigate('/faculty');
-                    break;
-                  case 'conflicts':
-                    navigate('/timetable');
-                    break;
-                  case 'utilization':
-                    navigate('/labs');
-                    break;
-                  case 'efficiency':
-                    navigate('/timetable');
-                    break;
-                  case 'capacity':
-                    navigate('/classes');
-                    break;
-                  default:
-                    console.log('Unknown card:', cardId);
-                }
-              }}
+                timetableData={dashboardData.upcomingClasses}
+                teachers={[
+                  { id: 1, name: 'Dr. Smith', department: 'Computer Science' },
+                  { id: 2, name: 'Prof. Johnson', department: 'Physics' },
+                  { id: 3, name: 'Prof. Davis', department: 'Mathematics' },
+                  { id: 4, name: 'Dr. Williams', department: 'English' },
+                  { id: 5, name: 'Dr. Wilson', department: 'Chemistry' }
+                ]}
+                classrooms={[
+                  { id: 1, name: 'Room A12', capacity: 50, type: 'lecture' },
+                  { id: 2, name: 'Room B5', capacity: 30, type: 'tutorial' },
+                  { id: 3, name: 'Room C10', capacity: 40, type: 'lecture' },
+                  { id: 4, name: 'Room D2', capacity: 35, type: 'lecture' },
+                  { id: 5, name: 'Lab 1', capacity: 25, type: 'lab' },
+                  { id: 6, name: 'Lab 2', capacity: 25, type: 'lab' },
+                  { id: 7, name: 'Lab 3', capacity: 20, type: 'lab' }
+                ]}
+                subjects={[
+                  'CS101', 'PHY101', 'MATH101', 'ENG101', 'CHEM101', 
+                  'BIO101', 'HIST101', 'GEOG101', 'ECON101', 'PSYC101'
+                ]}
+                conflicts={0}
+                onCardClick={(cardId, action) => {
+                  console.log(`Card clicked: ${cardId}, Action: ${action}`);
+                  // Navigate based on card type
+                  switch(cardId) {
+                    case 'classes':
+                      navigate('/classes');
+                      break;
+                    case 'labs':
+                      navigate('/labs');
+                      break;
+                    case 'faculty':
+                      navigate('/faculty');
+                      break;
+                    case 'conflicts':
+                      navigate('/timetable');
+                      break;
+                    case 'utilization':
+                      navigate('/labs');
+                      break;
+                    case 'efficiency':
+                      navigate('/timetable');
+                      break;
+                    case 'capacity':
+                      navigate('/classes');
+                      break;
+                    default:
+                      console.log('Unknown card:', cardId);
+                  }
+                }}
               />
             </div>
           </div>
-          <div className="dashboard-sidebar">
-            <QuickActions 
-              onGenerateSchedule={(scheduleData) => {
-                console.log('Schedule generated:', scheduleData);
-                // Update dashboard data with new schedule
-                setDashboardData(prev => ({
-                  ...prev,
-                  upcomingClasses: scheduleData
-                }));
-              }}
-              onDataUpload={(data) => {
-                console.log('Data uploaded:', data);
-                navigate('/import');
-              }}
-            />
-            <RecentActivities activities={dashboardData.recentActivities} />
+
+          {/* Sidebar */}
+          <div className="space-y-6">
+            <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg border border-white/20 p-6">
+              <QuickActions 
+                onGenerateSchedule={(scheduleData) => {
+                  console.log('Schedule generated:', scheduleData);
+                  // Update dashboard data with new schedule
+                  setDashboardData(prev => ({
+                    ...prev,
+                    upcomingClasses: scheduleData
+                  }));
+                }}
+                onDataUpload={(data) => {
+                  console.log('Data uploaded:', data);
+                  navigate('/import');
+                }}
+              />
+            </div>
+            
+            <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg border border-white/20 p-6">
+              <RecentActivities activities={dashboardData.recentActivities} />
+            </div>
           </div>
         </div>
       </div>
-      <ToastContainer toasts={toasts} removeToast={(id) => {}} />
+      
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
     </div>
   );
 };

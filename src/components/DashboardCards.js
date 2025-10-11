@@ -305,40 +305,55 @@ const DashboardCards = ({
   };
 
   return (
-    <div className="dashboard-cards">
-      <div className="dashboard-header">
-        <h2>Performance Analytics</h2>
-        <p>Real-time insights and metrics from your timetable system</p>
+    <div className="space-y-6">
+      <div className="text-center">
+        <h2 className="text-3xl font-bold text-slate-800 mb-2">Performance Analytics</h2>
+        <p className="text-slate-600">Real-time insights and metrics from your timetable system</p>
       </div>
       
-      <div className="cards-grid">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {cardData.map((stat) => (
           <div 
             key={stat.id} 
-            className={`card stat-card ${stat.color}`}
+            className="group relative bg-white/60 backdrop-blur-sm rounded-2xl border border-white/20 p-6 hover:bg-white/80 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer"
             onClick={() => onCardClick(stat.id, 'view')}
           >
-            <div className="card-header">
-              <div className={`icon ${stat.color}`}>
-                <i className={stat.icon}></i>
+            {/* Header */}
+            <div className="flex items-start justify-between mb-4">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
+                stat.color === 'blue' ? 'bg-gradient-to-r from-blue-500 to-blue-600' :
+                stat.color === 'green' ? 'bg-gradient-to-r from-green-500 to-green-600' :
+                stat.color === 'orange' ? 'bg-gradient-to-r from-orange-500 to-orange-600' :
+                stat.color === 'red' ? 'bg-gradient-to-r from-red-500 to-red-600' :
+                stat.color === 'purple' ? 'bg-gradient-to-r from-purple-500 to-purple-600' :
+                'bg-gradient-to-r from-slate-500 to-slate-600'
+              }`}>
+                <i className={`${stat.icon} text-white text-lg`}></i>
               </div>
-              <div className="value">
-                <h3>{stat.value}</h3>
-                <div className={`trend-indicator ${getTrendColor(stat.trend)}`}>
-                  <i className={`fas ${getTrendIcon(stat.trend)}`}></i>
+              
+              <div className="text-right">
+                <div className="text-2xl font-bold text-slate-800 mb-1">{stat.value}</div>
+                <div className={`flex items-center space-x-1 text-sm ${
+                  getTrendColor(stat.trend) === 'positive' ? 'text-green-600' :
+                  getTrendColor(stat.trend) === 'negative' ? 'text-red-600' :
+                  'text-slate-500'
+                }`}>
+                  <i className={`fas ${getTrendIcon(stat.trend)} text-xs`}></i>
                   <span>{stat.trendValue}</span>
                 </div>
               </div>
             </div>
             
-            <div className="card-body">
-              <h4>{stat.title}</h4>
-              <p className="description">{stat.description}</p>
+            {/* Body */}
+            <div className="mb-4">
+              <h4 className="font-semibold text-slate-800 mb-1">{stat.title}</h4>
+              <p className="text-sm text-slate-600 leading-relaxed">{stat.description}</p>
             </div>
             
-            <div className="card-footer">
+            {/* Footer */}
+            <div className="flex justify-end">
               <button 
-                className="card-action"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors duration-200"
                 onClick={(e) => {
                   e.stopPropagation();
                   onCardClick(stat.id, stat.action.toLowerCase());
@@ -348,15 +363,17 @@ const DashboardCards = ({
               </button>
             </div>
             
+            {/* Alert Badge */}
             {stat.id === 'conflicts' && stat.value > 0 && (
-              <div className="alert-badge">
-                <i className="fas fa-exclamation"></i>
+              <div className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center shadow-lg">
+                <i className="fas fa-exclamation text-white text-xs"></i>
               </div>
             )}
             
+            {/* Success Badge */}
             {stat.id === 'efficiency' && stat.value > 90 && (
-              <div className="success-badge">
-                <i className="fas fa-star"></i>
+              <div className="absolute -top-2 -right-2 w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center shadow-lg">
+                <i className="fas fa-star text-white text-xs"></i>
               </div>
             )}
           </div>

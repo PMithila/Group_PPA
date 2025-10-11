@@ -2,12 +2,11 @@
 import React, { useState, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { processExcelData, validateExcelData } from '../utils/excelProcessor';
-import DataPreview from '../components/DataPreview';
-import UploadArea from '../components/UploadArea';
+// Removed imports for deleted components: DataPreview and UploadArea
 import Header from '../components/Header';
 import { useAuth } from '../context/AuthContext';
-import '../styles/Dashboard.css';
-import '../styles/ImportData.css';
+// Removed old CSS import - using Tailwind CSS now
+// Removed old CSS import - using Tailwind CSS now
 
 const ImportData = ({ onDataUpload }) => {
   const { currentUser } = useAuth();
@@ -192,11 +191,49 @@ const ImportData = ({ onDataUpload }) => {
               
               <div className="card-body">
                 {isAdmin ? (
-                  <UploadArea
-                    onFileUpload={handleFileUpload}
-                    uploadState={uploadState}
-                    onReset={handleReset}
-                  />
+                  <div className="upload-area">
+                    <div className="upload-zone">
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls"
+                        onChange={(e) => handleFileUpload(e.target.files[0])}
+                        className="file-input"
+                        id="excel-upload"
+                      />
+                      <label htmlFor="excel-upload" className="upload-label">
+                        <i className="fas fa-cloud-upload-alt"></i>
+                        <span>Click to upload or drag and drop</span>
+                        <p>Excel files only (.xlsx, .xls)</p>
+                      </label>
+                    </div>
+
+                    {uploadState.status === 'uploading' && (
+                      <div className="upload-status uploading">
+                        <div className="spinner"></div>
+                        <span>{uploadState.message}</span>
+                      </div>
+                    )}
+
+                    {uploadState.status === 'success' && (
+                      <div className="upload-status success">
+                        <i className="fas fa-check-circle"></i>
+                        <span>{uploadState.message}</span>
+                      </div>
+                    )}
+
+                    {uploadState.status === 'error' && (
+                      <div className="upload-status error">
+                        <i className="fas fa-exclamation-circle"></i>
+                        <span>{uploadState.message}</span>
+                      </div>
+                    )}
+
+                    {uploadState.status !== 'idle' && (
+                      <button className="btn btn-secondary" onClick={handleReset}>
+                        <i className="fas fa-redo"></i> Reset
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <div className="read-only-info">
                     <div className="info-card">
@@ -293,14 +330,7 @@ const ImportData = ({ onDataUpload }) => {
               </div>
             )}
 
-            {/* Data Preview */}
-            {uploadState.importedData && (
-              <DataPreview
-                data={uploadState.importedData}
-                activeTab={uploadState.activeTab}
-                onTabChange={handleTabChange}
-              />
-            )}
+            {/* Removed DataPreview component - showing summary instead */}
           </div>
         </div>
       </div>

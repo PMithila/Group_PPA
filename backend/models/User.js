@@ -1,11 +1,12 @@
 import pool from '../config/database.js';
 
 export class User {
-  constructor(email, password, name = null, role = 'teacher') {
+  constructor(email, password, name = null, role = 'teacher', department = null) {
     this.email = email;
     this.password = password;
     this.name = name;
     this.role = role;
+    this.department = department;
     this.created_at = new Date();
   }
 
@@ -17,6 +18,7 @@ export class User {
         password VARCHAR(255) NOT NULL,
         name VARCHAR(255),
         role VARCHAR(50) DEFAULT 'teacher',
+        department VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
@@ -37,16 +39,15 @@ export class User {
   }
 
   static async create(userData) {
-    const { email, password, name, role } = userData;
+    const { email, password, name, role, department } = userData;
     const query = `
-      INSERT INTO users (email, password, name, role) 
-      VALUES ($1, $2, $3, $4) 
-      RETURNING id, email, name, role, created_at
+      INSERT INTO users (email, password, name, role, department)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, email, name, role, department, created_at
     `;
-    const result = await pool.query(query, [email, password, name, role]);
+    const result = await pool.query(query, [email, password, name, role, department]);
     return result.rows[0];
   }
-
   static async update(id, updates) {
     const fields = Object.keys(updates).map((key, index) => `${key} = $${index + 1}`);
     const values = Object.values(updates);

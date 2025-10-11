@@ -7,9 +7,18 @@ const instance = axios.create({
   baseURL: API_BASE,
 });
 
+// Ensure this is the same instance used throughout the app
+console.log('Axios instance created:', instance);
+
 export function setToken(token) {
-  if (token) instance.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-  else delete instance.defaults.headers.common["Authorization"];
+  console.log('Setting token in axios instance:', token ? 'Token present' : 'No token');
+  if (token) {
+    instance.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    console.log('Authorization header set:', instance.defaults.headers.common["Authorization"]);
+  } else {
+    delete instance.defaults.headers.common["Authorization"];
+    console.log('Authorization header removed');
+  }
   // Save token to localStorage for persistence
   if (token) localStorage.setItem('stms_token', token);
   else localStorage.removeItem('stms_token');
@@ -20,8 +29,8 @@ export function getToken() {
   return localStorage.getItem('stms_token');
 }
 
-export async function register(email, password, name = null) {
-  const res = await instance.post("/auth/register", { email, password, name });
+export async function register(email, password, name = null, department = null, role = 'teacher') {
+  const res = await instance.post("/auth/register", { email, password, name, department, role });
   return res.data;
 }
 
@@ -35,16 +44,32 @@ export async function uploadCSV(file) {
   const res = await instance.post("/upload", fd, { headers: {"Content-Type":"multipart/form-data"} });
   return res.data;
 }
-export async function runScheduler(algorithm="heuristic") {
-  const res = await instance.post("/run_scheduler", null, { params: { algorithm } });
+export async function search(query) {
+  const res = await instance.get("/api/search", { params: { q: query } });
+  return res.data;
+}
+
+export async function updateCurrentUserProfile(userData) {
+  const res = await instance.put("/auth/profile", userData);
   return res.data;
 }
 
 // Classes API
 export async function getClasses() {
+  console.log('Making getClasses API call, axios instance headers:', instance.defaults.headers.common);
   const res = await instance.get("/api/classes");
   return res.data;
 }
+
+export const getLabSessions = async () => {
+  try {
+    const res = await instance.get("/api/labs");
+    return res.data;
+  } catch (error) {
+    console.error('Error fetching lab sessions:', error);
+    throw error;
+  }
+};
 
 export async function createClass(classData) {
   const res = await instance.post("/api/classes", classData);
@@ -61,24 +86,80 @@ export async function deleteClass(id) {
   return res.data;
 }
 
-// Faculty API
-export async function getFaculty() {
-  const res = await instance.get("/api/faculty");
+// Subjects API
+export async function getSubjects() {
+  const res = await instance.get("/api/subjects");
   return res.data;
 }
 
-export async function createFaculty(facultyData) {
-  const res = await instance.post("/api/faculty", facultyData);
+export async function getSubjectById(id) {
+  const res = await instance.get(`/api/subjects/${id}`);
   return res.data;
 }
 
-export async function updateFaculty(id, facultyData) {
-  const res = await instance.put(`/api/faculty/${id}`, facultyData);
+export async function getSubjectsByDepartment(departmentId) {
+  const res = await instance.get(`/api/subjects/department/${departmentId}`);
   return res.data;
 }
 
-export async function deleteFaculty(id) {
-  const res = await instance.delete(`/api/faculty/${id}`);
+export async function searchSubjects(term) {
+  const res = await instance.get(`/api/subjects/search/${term}`);
+  return res.data;
+}
+
+export async function createSubject(subjectData) {
+  const res = await instance.post("/api/subjects", subjectData);
+  return res.data;
+}
+
+export async function updateSubject(id, subjectData) {
+  const res = await instance.put(`/api/subjects/${id}`, subjectData);
+  return res.data;
+}
+
+export async function deleteSubject(id) {
+  const res = await instance.delete(`/api/subjects/${id}`);
+  return res.data;
+}
+
+// Departments API
+export async function getDepartments() {
+  const res = await instance.get("/api/departments");
+  return res.data;
+}
+
+export async function getDepartmentsWithStats() {
+  const res = await instance.get("/api/departments/stats");
+  return res.data;
+}
+
+export async function getDepartmentById(id) {
+  const res = await instance.get(`/api/departments/${id}`);
+  return res.data;
+}
+
+export async function getDepartmentByCode(code) {
+  const res = await instance.get(`/api/departments/code/${code}`);
+  return res.data;
+}
+
+export async function searchDepartments(term) {
+  const res = await instance.get(`/api/departments/search/${term}`);
+  return res.data;
+}
+
+export async function createDepartment(departmentData) {
+  const res = await instance.post("/api/departments", departmentData);
+  return res.data;
+}
+
+export async function updateDepartment(id, departmentData) {
+  const res = await instance.put(`/api/departments/${id}`, departmentData);
+  return res.data;
+}
+
+export async function deleteDepartment(id) {
+  const res = await instance.delete(`/api/departments/${id}`);
   return res.data;
 }
 
@@ -105,6 +186,7 @@ export async function deleteLab(id) {
 
 // Teachers API (from users)
 export async function getTeachers() {
+  console.log('Making getTeachers API call, axios instance headers:', instance.defaults.headers.common);
   const res = await instance.get("/auth/teachers");
   return res.data;
 }
@@ -129,3 +211,5 @@ export async function deleteUser(id) {
   const res = await instance.delete(`/auth/users/${id}`);
   return res.data;
 }
+
+export { instance };

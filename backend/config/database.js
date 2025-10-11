@@ -1,22 +1,34 @@
+// ./config/database.js
+import 'dotenv/config';
 import pg from 'pg';
-import dotenv from 'dotenv';
-
-dotenv.config();
-
 const { Pool } = pg;
 
+// PostgreSQL configuration
+const connectionString = process.env.DATABASE_URL?.trim();
+if (!connectionString) {
+  throw new Error('Missing DATABASE_URL in environment');
+}
+
+// Log connection info (remove in production)
+try {
+  const host = new URL(connectionString).host;
+  console.log('[DB] Using PostgreSQL host:', host);
+} catch {
+  console.warn('[DB] DATABASE_URL is not a valid URL');
+}
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  connectionString,
+  ssl: { rejectUnauthorized: false }, // Required for Supabase
 });
 
-// Test database connection
-pool.on('connect', () => {
-  console.log('Connected to PostgreSQL database');
-});
-
-pool.on('error', (err) => {
-  console.error('Database connection error:', err);
+// Test the connection
+pool.query('SELECT NOW()', (err, res) => {
+  if (err) {
+    console.error('[DB] Connection error:', err);
+  } else {
+    console.log('[DB] Connected to PostgreSQL successfully');
+  }
 });
 
 export default pool;

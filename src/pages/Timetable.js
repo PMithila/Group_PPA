@@ -1,52 +1,41 @@
 // src/pages/Timetable.js
 import React, { useState, useEffect, useCallback } from 'react';
 import GenerateScheduleModal from '../components/GenerateScheduleModal';
-import AIAgent from '../components/AIAgent';
+// Removed AIAgent import - component was deleted during cleanup
 import TeacherNotifications from '../components/TeacherNotifications';
 import Header from '../components/Header';
 import { useAuth } from '../context/AuthContext';
-import { getClasses } from '../api'; // Import getClasses
-import '../styles/Dashboard.css';
-import '../styles/EnhancedComponents.css';
-import '../styles/Timetable.css';
+import { getClasses, getLabSessions } from '../api';
 
 const Timetable = ({ timetableData, onTimetableUpdate, user }) => {
   const { currentUser } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [currentTimetable, setCurrentTimetable] = useState(timetableData || []);
-  const [classes, setClasses] = useState([]); // Add state for classes
+  const [classes, setClasses] = useState([]);
+  const [labSessions, setLabSessions] = useState([]);
   const [filter, setFilter] = useState({
     type: 'all',
     teacher: 'all',
     room: 'all'
   });
-  const [viewMode, setViewMode] = useState('institutional'); // 'institutional', 'teacher', 'room'
-  // Removed unused analysisResults state
+  const [viewMode, setViewMode] = useState('institutional');
 
   // Convert classes data to timetable format
-  const convertClassesToTimetable = useCallback((classesData) => {
-    // Define time slots mapping
-    const timeSlotMapping = {
-      '8am-9am': '8:00-9:00',
-      '9am-10am': '9:00-10:00',
-      '10am-11am': '10:00-11:00',
-      '11am-12pm': '11:00-12:00',
-      '12pm-1pm': '12:00-13:00',
-      '1pm-2pm': '13:00-14:00',
-      '2pm-3pm': '14:00-15:00',
-      '3pm-4pm': '15:00-16:00',
-      '4pm-5pm': '16:00-17:00',
-      '5pm-6pm': '17:00-18:00',
-      '6pm-7pm': '18:00-19:00',
-      '7pm-8pm': '19:00-20:00'
-    };
+  const convertClassesToTimetable = useCallback((classesData, labData = []) => {
+    // Fixed ascending time slots
+    const fixedTimeSlots = [
+      '7:30-8:10',
+      '8:10-8:30',
+      '8:30-9:10',
+      '9:10-10:30',
+      '10:50-11:30',
+      '11:30-12:10',
+      '12:10-12:50',
+      '12:50-1:30'
+    ];
 
-    // Get all unique time slots from classes
-    const uniqueTimeSlots = [...new Set(classesData.map(cls => cls.time_slot).filter(Boolean))];
-    
-    // Create timetable structure
-    const timetable = uniqueTimeSlots.map(timeSlot => {
-      const formattedTime = timeSlotMapping[timeSlot] || timeSlot;
+    const timetable = fixedTimeSlots.map(timeSlot => {
+      const formattedTime = timeSlot;
       const days = {
         Monday: null,
         Tuesday: null,
@@ -57,31 +46,40 @@ const Timetable = ({ timetableData, onTimetableUpdate, user }) => {
         Sunday: null
       };
 
-      // Find classes for this time slot
-      const classesForTimeSlot = classesData.filter(cls => cls.time_slot === timeSlot);
-      
-      // Populate days with classes
-      classesForTimeSlot.forEach(cls => {
-        if (cls.day && days.hasOwnProperty(cls.day)) {
-          // Determine class type based on class name or code
-          let classType = 'lecture'; // Default type
-          const className = cls.name.toLowerCase();
-          const classCode = cls.code.toLowerCase();
-          
-          if (className.includes('lab') || classCode.includes('lab')) {
-            classType = 'lab';
-          } else if (className.includes('tutorial') || classCode.includes('tut')) {
-            classType = 'tutorial';
-          } else if (className.includes('seminar') || classCode.includes('sem')) {
-            classType = 'seminar';
-          }
-
+      // Add classes to timetable
+      classesData.forEach(cls => {
+        if (cls.time_slot === timeSlot && cls.day && days.hasOwnProperty(cls.day)) {
           days[cls.day] = {
-            type: classType,
-            content: `${cls.code} - ${cls.name}${cls.room ? ` (${cls.room})` : ''}`,
-            teacher: cls.teacher || 'TBA',
-            classId: cls.id,
-            room: cls.room
+            id: cls.id,
+            code: cls.code,
+            name: cls.name,
+            teacher: cls.teacher,
+            room: cls.room,
+            subject_name: cls.subject_name,
+            department_name: cls.department_name,
+            duration: cls.duration,
+            max_students: cls.max_students,
+            type: 'class'
+          };
+        }
+      });
+
+      // Add lab sessions to timetable
+      labData.forEach(lab => {
+        if (lab.time_slot === timeSlot && lab.day && days.hasOwnProperty(lab.day) && !days[lab.day]) {
+          days[lab.day] = {
+            id: lab.id,
+            code: lab.name, // Using name as code for labs
+            name: lab.name,
+            teacher: lab.teacher_name || lab.teacher,
+            room: lab.room,
+            subject_name: lab.subject_name || 'Lab Session',
+            department_name: lab.department_name,
+            duration: lab.duration,
+            max_students: lab.max_students,
+            capacity: lab.capacity,
+            resources: lab.resources,
+            type: 'lab'
           };
         }
       });
@@ -92,378 +90,373 @@ const Timetable = ({ timetableData, onTimetableUpdate, user }) => {
       };
     });
 
-    // Sort timetable by time
-    return timetable.sort((a, b) => {
-      const timeA = a.time.split('-')[0];
-      const timeB = b.time.split('-')[0];
-      return timeA.localeCompare(timeB);
-    });
-  }, []);
-
-  // Initialize with default timetable if no data provided
-  const getDefaultTimetable = useCallback(() => {
-    return [
-      {
-        time: '8:00-9:00',
-        days: {
-          Monday: { type: 'lecture', content: 'CS101 (Room A12)', teacher: 'Dr. Smith' },
-          Tuesday: null,
-          Wednesday: { type: 'lab', content: 'Physics Lab (Lab 3)', teacher: 'Prof. Johnson' },
-          Thursday: null,
-          Friday: { type: 'lecture', content: 'CS101 (Room A12)', teacher: 'Dr. Smith' },
-          Saturday: null,
-          Sunday: null
-        }
-      },
-      {
-        time: '9:00-10:00',
-        days: {
-          Monday: { type: 'tutorial', content: 'MATH101 (Room B5)', teacher: 'Prof. Davis' },
-          Tuesday: { type: 'lecture', content: 'PHY101 (Room C10)', teacher: 'Prof. Johnson' },
-          Wednesday: null,
-          Thursday: { type: 'lecture', content: 'ENG101 (Room D2)', teacher: 'Dr. Williams' },
-          Friday: { type: 'tutorial', content: 'MATH101 (Room B5)', teacher: 'Prof. Davis' },
-          Saturday: null,
-          Sunday: null
-        }
-      },
-      {
-        time: '10:00-11:00',
-        days: {
-          Monday: { type: 'lecture', content: 'CHEM101 (Lab 1)', teacher: 'Dr. Wilson' },
-          Tuesday: { type: 'lab', content: 'Chemistry Lab (Lab 1)', teacher: 'Dr. Wilson' },
-          Wednesday: { type: 'lecture', content: 'BIO101 (Room C10)', teacher: 'Dr. Garcia' },
-          Thursday: { type: 'tutorial', content: 'CHEM101 (Room B5)', teacher: 'Dr. Wilson' },
-          Friday: { type: 'lab', content: 'Biology Lab (Lab 2)', teacher: 'Dr. Garcia' },
-          Saturday: null,
-          Sunday: null
-        }
-      },
-      {
-        time: '11:00-12:00',
-        days: {
-          Monday: { type: 'lecture', content: 'HIST101 (Room D2)', teacher: 'Dr. Brown' },
-          Tuesday: { type: 'lecture', content: 'GEOG101 (Room A12)', teacher: 'Dr. Miller' },
-          Wednesday: { type: 'tutorial', content: 'HIST101 (Room B5)', teacher: 'Dr. Brown' },
-          Thursday: { type: 'lab', content: 'Geography Lab (Lab 3)', teacher: 'Dr. Miller' },
-          Friday: { type: 'lecture', content: 'ECON101 (Room C10)', teacher: 'Dr. Anderson' },
-          Saturday: null,
-          Sunday: null
-        }
-      }
-    ];
+    return timetable;
   }, []);
 
   useEffect(() => {
-    // Fetch classes from the database
-    const fetchClasses = async () => {
+    const fetchData = async () => {
       try {
-        const fetchedClasses = await getClasses();
-        setClasses(fetchedClasses);
+        // Always create an empty timetable first so it displays permanently
+        const emptyTimetable = createEmptyTimetable();
+        setCurrentTimetable(emptyTimetable);
         
-        // Convert classes to timetable format
-        if (fetchedClasses && fetchedClasses.length > 0) {
-          const convertedTimetable = convertClassesToTimetable(fetchedClasses);
-          setCurrentTimetable(convertedTimetable);
-        } else {
-          // Use default timetable if no classes found
-          setCurrentTimetable(getDefaultTimetable());
-        }
+        // Fetch classes and lab sessions
+        const [classesData, labsData] = await Promise.all([
+          getClasses(),
+          getLabSessions()
+        ]);
+        
+        setClasses(classesData);
+        setLabSessions(labsData);
+        
+        // Update timetable with the fetched data
+        const timetable = convertClassesToTimetable(classesData, labsData);
+        setCurrentTimetable(timetable);
       } catch (error) {
-        console.error("Failed to fetch classes:", error);
-        // Fallback to default timetable on error
-        setCurrentTimetable(getDefaultTimetable());
+        console.error('Failed to fetch timetable data:', error);
       }
     };
 
-    fetchClasses();
-
-    // If timetableData is provided as prop, use it instead
-    if (timetableData && timetableData.length > 0) {
-      setCurrentTimetable(timetableData);
-    }
-  }, [timetableData, getDefaultTimetable, convertClassesToTimetable]);
-
-  const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
-  const handleScheduleItemClick = (content, teacher, type) => {
-    if (content) {
-      alert(`Class: ${content}\nTeacher: ${teacher}\nType: ${type}\n\nClick "Generate Schedule" to optimize with AI.`);
-    }
-  };
-
-  const handleScheduleGenerated = (newSchedule) => {
-    setCurrentTimetable(newSchedule);
-    if (onTimetableUpdate) {
-      onTimetableUpdate(newSchedule);
-    }
-    setShowModal(false);
-  };
-
-  const handleGenerateClick = () => {
-    setShowModal(true);
-  };
-
-  const handleExportTimetable = () => {
-    // Convert timetable to CSV format
-    let csvContent = "Time,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday\n";
+    fetchData();
+  }, [convertClassesToTimetable]);
+  
+  // Create an empty timetable structure
+  const createEmptyTimetable = () => {
+    const fixedTimeSlots = [
+      '7:30-8:10',
+      '8:10-8:30',
+      '8:30-9:10',
+      '9:10-10:30',
+      '10:50-11:30',
+      '11:30-12:10',
+      '12:10-12:50',
+      '12:50-1:30'
+    ];
     
-    currentTimetable.forEach(row => {
-      const dayValues = daysOfWeek.map(day => {
-        const classInfo = row.days[day];
-        return classInfo ? `"${classInfo.content} (${classInfo.teacher})"` : '';
-      });
-      
-      csvContent += `${row.time},${dayValues.join(',')}\n`;
-    });
-    
-    // Create download link
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'timetable_export.csv');
-    link.style.visibility = 'hidden';
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleFilterChange = (e) => {
-    const { name, value } = e.target;
-    setFilter(prev => ({
-      ...prev,
-      [name]: value
+    return fixedTimeSlots.map(timeSlot => ({
+      time: timeSlot,
+      days: {
+        Monday: null,
+        Tuesday: null,
+        Wednesday: null,
+        Thursday: null,
+        Friday: null,
+        Saturday: null,
+        Sunday: null
+      }
     }));
   };
 
-  const handleViewModeChange = (mode) => {
-    setViewMode(mode);
-    // Reset filters when changing view mode
-    setFilter({ type: 'all', teacher: 'all', room: 'all' });
-  };
-
-  const handleAnalyzeComplete = (results) => {
-    // You can handle analysis results here if needed, currently not used
-  };
-
-  const handleOptimize = () => {
-    // This would trigger the AI optimization process
-    setShowModal(true);
-  };
-
-  const handleRefreshTimetable = async () => {
-    try {
-      const fetchedClasses = await getClasses();
-      setClasses(fetchedClasses);
-      
-      // Convert classes to timetable format
-      if (fetchedClasses && fetchedClasses.length > 0) {
-        const convertedTimetable = convertClassesToTimetable(fetchedClasses);
-        setCurrentTimetable(convertedTimetable);
-      } else {
-        // Use default timetable if no classes found
-        setCurrentTimetable(getDefaultTimetable());
-      }
-    } catch (error) {
-      console.error("Failed to refresh timetable:", error);
+  const handleTimetableUpdate = (newTimetable) => {
+    setCurrentTimetable(newTimetable);
+    if (onTimetableUpdate) {
+      onTimetableUpdate(newTimetable);
     }
   };
 
-  // Get unique values for filters
-  const teachers = [...new Set(
-    currentTimetable.flatMap(slot => 
-      daysOfWeek.map(day => slot.days[day]?.teacher).filter(Boolean)
-    )
-  )];
+  const filteredTimetable = currentTimetable.filter(slot => {
+    const hasClasses = Object.values(slot.days).some(Boolean);
+    if (!hasClasses) return false;
 
-  const rooms = [...new Set(
-    currentTimetable.flatMap(slot => 
-      daysOfWeek.map(day => {
-        const content = slot.days[day]?.content;
-        return content ? content.match(/\((.*?)\)/)?.[1] : null;
-      }).filter(Boolean)
-    )
-  )];
+    if (filter.type === 'all' && filter.teacher === 'all' && filter.room === 'all') {
+      return true;
+    }
 
-  // Filter timetable based on current filters and view mode
-  const filteredTimetable = currentTimetable.map(timeSlot => {
-    const filteredDays = {};
-    
-    daysOfWeek.forEach(day => {
-      const classInfo = timeSlot.days[day];
+    return Object.values(slot.days).some(classData => {
+      if (!classData) return false;
       
-      if (!classInfo) {
-        filteredDays[day] = null;
-        return;
-      }
+      const typeMatch = filter.type === 'all' || 
+        (filter.type === 'lecture' && !classData.room?.toLowerCase().includes('lab')) ||
+        (filter.type === 'lab' && classData.room?.toLowerCase().includes('lab'));
       
-      // Apply filters
-      const typeMatch = filter.type === 'all' || classInfo.type === filter.type;
-      const teacherMatch = filter.teacher === 'all' || classInfo.teacher === filter.teacher;
-      const roomMatch = filter.room === 'all' || classInfo.content.includes(filter.room);
+      const teacherMatch = filter.teacher === 'all' || classData.teacher === filter.teacher;
+      const roomMatch = filter.room === 'all' || classData.room === filter.room;
       
-      if (typeMatch && teacherMatch && roomMatch) {
-        filteredDays[day] = classInfo;
-      } else {
-        filteredDays[day] = null;
-      }
+      return typeMatch && teacherMatch && roomMatch;
     });
-    
-    return {
-      time: timeSlot.time,
-      days: filteredDays
-    };
   });
 
+  const getUniqueTeachers = () => {
+    const teachers = new Set();
+    currentTimetable.forEach(slot => {
+      Object.values(slot.days).forEach(classData => {
+        if (classData?.teacher) {
+          teachers.add(classData.teacher);
+        }
+      });
+    });
+    return Array.from(teachers).sort();
+  };
+
+  const getUniqueRooms = () => {
+    const rooms = new Set();
+    currentTimetable.forEach(slot => {
+      Object.values(slot.days).forEach(classData => {
+        if (classData?.room) {
+          rooms.add(classData.room);
+        }
+      });
+    });
+    return Array.from(rooms).sort();
+  };
+
+  const getClassColor = (classData) => {
+    if (!classData) return '';
+    
+    const colors = [
+      'bg-blue-100 border-blue-300 text-blue-800',
+      'bg-green-100 border-green-300 text-green-800',
+      'bg-purple-100 border-purple-300 text-purple-800',
+      'bg-orange-100 border-orange-300 text-orange-800',
+      'bg-pink-100 border-pink-300 text-pink-800',
+      'bg-indigo-100 border-indigo-300 text-indigo-800',
+      'bg-yellow-100 border-yellow-300 text-yellow-800'
+    ];
+    
+    const hash = classData.code.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return colors[hash % colors.length];
+  };
+
   return (
-    <div className="dashboard-container">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <Header user={currentUser} />
-      <div className="dashboard-content">
-        <div className="timetable-page">
-          <div className="page-header">
-            <h2>Timetable Management</h2>
-            <p>View and manage your institution's timetable</p>
-          </div>
-
-          {/* Teacher Notifications - Only show for teachers */}
-          {(currentUser?.role === 'teacher' || currentUser?.role === 'TEACHER') && (
-            <TeacherNotifications />
-          )}
-
-          {/* AI Agent Component */}
-          <AIAgent 
-            onOptimize={handleOptimize}
-            onAnalyze={handleAnalyzeComplete}
-            timetable={currentTimetable}
-            user={user}
-          />
-
-          <div className="section-header">
-        <h2 className="section-title">
-          {viewMode === 'institutional' ? 'Institutional Timetable' : 
-           viewMode === 'teacher' ? 'My Schedule' : 'Room Schedule'}
-        </h2>
-        
-        <div className="view-selector">
-          <button 
-            className={viewMode === 'institutional' ? 'btn btn-active' : 'btn'}
-            onClick={() => handleViewModeChange('institutional')}
-          >
-            Institutional
-          </button>
-          {user?.role === 'TEACHER' && (
-            <button 
-              className={viewMode === 'teacher' ? 'btn btn-active' : 'btn'}
-              onClick={() => handleViewModeChange('teacher')}
-            >
-              My Schedule
-            </button>
-          )}
-          <button 
-            className={viewMode === 'room' ? 'btn btn-active' : 'btn'}
-            onClick={() => handleViewModeChange('room')}
-          >
-            Room View
-          </button>
-        </div>
-        
-        <div className="actions">
-          <button className="btn btn-primary" onClick={handleGenerateClick}>
-            <i className="fas fa-robot"></i> AI Optimize Schedule
-          </button>
-          <button className="btn btn-secondary" onClick={handleRefreshTimetable}>
-            <i className="fas fa-sync-alt"></i> Refresh from Classes
-          </button>
-          <button className="btn btn-secondary" onClick={handleExportTimetable}>
-            <i className="fas fa-download"></i> Export CSV
-          </button>
-        </div>
-      </div>
-
-      <div className="timetable-filters">
-        <div className="filter-group">
-          <label>Filter by Type:</label>
-          <select name="type" value={filter.type} onChange={handleFilterChange}>
-            <option value="all">All Types</option>
-            <option value="lecture">Lectures</option>
-            <option value="lab">Labs</option>
-            <option value="tutorial">Tutorials</option>
-          </select>
-        </div>
-        
-        <div className="filter-group">
-          <label>Filter by Teacher:</label>
-          <select name="teacher" value={filter.teacher} onChange={handleFilterChange}>
-            <option value="all">All Teachers</option>
-            {teachers.map(teacher => (
-              <option key={teacher} value={teacher}>{teacher}</option>
-            ))}
-          </select>
-        </div>
-        
-        <div className="filter-group">
-          <label>Filter by Room:</label>
-          <select name="room" value={filter.room} onChange={handleFilterChange}>
-            <option value="all">All Rooms</option>
-            {rooms.map(room => (
-              <option key={room} value={room}>{room}</option>
-            ))}
-          </select>
-        </div>
-        
-        <button 
-          className="btn btn-secondary"
-          onClick={() => setFilter({ type: 'all', teacher: 'all', room: 'all' })}
-        >
-          Clear Filters
-        </button>
-      </div>
-
-      <div className="timetable-container">
-        <div className="timetable-view">
-          <div className="timetable-header">
-            <div className="time-header">Time</div>
-            {daysOfWeek.map(day => <div key={day}>{day.substring(0, 3)}</div>)}
-          </div>
-          
-          {filteredTimetable.map((row, index) => (
-            <div key={index} className="timetable-row">
-              <div className="time-slot">{row.time}</div>
-              {daysOfWeek.map(day => (
-                <div key={day} className="timetable-cell">
-                  {row.days[day] && (
-                    <div 
-                      className={`schedule-item ${row.days[day].type}`}
-                      onClick={() => handleScheduleItemClick(
-                        row.days[day].content, 
-                        row.days[day].teacher, 
-                        row.days[day].type
-                      )}
-                    >
-                      <div className="class-title">{row.days[day].content}</div>
-                      <div className="class-teacher">{row.days[day].teacher}</div>
-                      <div className="class-type">{row.days[day].type}</div>
-                    </div>
-                  )}
-                </div>
-              ))}
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-lg border border-white/20 p-8 mb-8">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-primary-600 to-primary-700 bg-clip-text text-transparent mb-2">
+                Timetable Management
+              </h1>
+              <p className="text-slate-600">
+                View and manage your institutional timetable with AI-powered insights
+              </p>
             </div>
-          ))}
+            
+            <div className="flex flex-col sm:flex-row gap-4">
+              <button
+                onClick={() => setShowModal(true)}
+                className="btn-primary flex items-center gap-2"
+              >
+                <i className="fas fa-magic"></i>
+                Generate Schedule
+              </button>
+              
+              <div className="flex items-center gap-2 bg-slate-100/80 rounded-xl p-1">
+                <button
+                  onClick={() => setViewMode('institutional')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    viewMode === 'institutional'
+                      ? 'bg-white text-primary-700 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <i className="fas fa-building mr-2"></i>
+                  Institutional
+                </button>
+                <button
+                  onClick={() => setViewMode('teacher')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    viewMode === 'teacher'
+                      ? 'bg-white text-primary-700 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <i className="fas fa-chalkboard-teacher mr-2"></i>
+                  Teacher
+                </button>
+                <button
+                  onClick={() => setViewMode('room')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    viewMode === 'room'
+                      ? 'bg-white text-primary-700 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <i className="fas fa-door-open mr-2"></i>
+                  Room
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
+
+        {/* Filters */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 p-6 mb-8">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Type</label>
+                <select
+                  value={filter.type}
+                  onChange={(e) => setFilter({...filter, type: e.target.value})}
+                  className="input-field w-40"
+                >
+                  <option value="all">All Types</option>
+                  <option value="lecture">Lecture</option>
+                  <option value="lab">Lab</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Teacher</label>
+                <select
+                  value={filter.teacher}
+                  onChange={(e) => setFilter({...filter, teacher: e.target.value})}
+                  className="input-field w-48"
+                >
+                  <option value="all">All Teachers</option>
+                  {getUniqueTeachers().map(teacher => (
+                    <option key={teacher} value={teacher}>{teacher}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Room</label>
+                <select
+                  value={filter.room}
+                  onChange={(e) => setFilter({...filter, room: e.target.value})}
+                  className="input-field w-40"
+                >
+                  <option value="all">All Rooms</option>
+                  {getUniqueRooms().map(room => (
+                    <option key={room} value={room}>{room}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2 ml-auto">
+              <button
+                onClick={() => setFilter({type: 'all', teacher: 'all', room: 'all'})}
+                className="btn-secondary text-sm"
+              >
+                <i className="fas fa-times mr-2"></i>
+                Clear Filters
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Timetable */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200">
+                <tr>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 min-w-[120px]">
+                    Time
+                  </th>
+                  <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 min-w-[150px]">
+                    Monday
+                  </th>
+                  <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 min-w-[150px]">
+                    Tuesday
+                  </th>
+                  <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 min-w-[150px]">
+                    Wednesday
+                  </th>
+                  <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 min-w-[150px]">
+                    Thursday
+                  </th>
+                  <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 min-w-[150px]">
+                    Friday
+                  </th>
+                  <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 min-w-[150px]">
+                    Saturday
+                  </th>
+                  <th className="px-6 py-4 text-center text-sm font-semibold text-slate-700 min-w-[150px]">
+                    Sunday
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTimetable.map((slot, index) => (
+                  <tr key={index} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+                    <td className="px-6 py-4 text-sm font-medium text-slate-700 bg-slate-50/50">
+                      {slot.time}
+                    </td>
+                    {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => (
+                      <td key={day} className="px-3 py-4 text-center">
+                        {slot.days[day] ? (
+                          <div className={`p-3 rounded-xl border-2 ${getClassColor(slot.days[day])} hover:shadow-md transition-all duration-200 cursor-pointer`}>
+                            <div className="font-semibold text-sm mb-1">
+                              {slot.days[day].code}
+                            </div>
+                            <div className="text-xs font-medium mb-1">
+                              {slot.days[day].name}
+                            </div>
+                            {slot.days[day].teacher && (
+                              <div className="text-xs opacity-75 mb-1">
+                                <i className="fas fa-chalkboard-teacher mr-1"></i>
+                                {slot.days[day].teacher}
+                              </div>
+                            )}
+                            {slot.days[day].room && (
+                              <div className="text-xs opacity-75 mb-1">
+                                <i className="fas fa-door-open mr-1"></i>
+                                {slot.days[day].room}
+                              </div>
+                            )}
+                            {slot.days[day].subject_name && (
+                              <div className="text-xs opacity-75">
+                                <i className="fas fa-book-open mr-1"></i>
+                                {slot.days[day].subject_name}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-slate-300 text-sm">-</div>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Empty State */}
+        {filteredTimetable.length === 0 && (
+          <div className="text-center py-12">
+            <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <i className="fas fa-table text-slate-400 text-3xl"></i>
+            </div>
+            <h3 className="text-xl font-semibold text-slate-800 mb-2">No timetable data found</h3>
+            <p className="text-slate-600 mb-6">
+              {currentTimetable.length === 0 
+                ? "Generate your first timetable to get started."
+                : "Try adjusting your filters to see more results."
+              }
+            </p>
+            {currentTimetable.length === 0 && (
+              <button
+                onClick={() => setShowModal(true)}
+                className="btn-primary"
+              >
+                <i className="fas fa-magic mr-2"></i>
+                Generate Timetable
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
+      {/* Modals */}
       {showModal && (
-        <GenerateScheduleModal 
-          onClose={() => setShowModal(false)} 
-          onScheduleGenerated={handleScheduleGenerated}
-          classes={classes} // Pass classes to the modal
+        <GenerateScheduleModal
+          onClose={() => setShowModal(false)}
+          onTimetableGenerated={handleTimetableUpdate}
         />
       )}
-        </div>
-      </div>
+
+      {/* Removed AIAgent component - was deleted during cleanup */}
+
+      {/* Teacher Notifications */}
+      <TeacherNotifications />
     </div>
   );
 };

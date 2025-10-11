@@ -1,70 +1,132 @@
-# Getting Started with Create React App
+# EduSync - Smart Timetable Management System
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+EduSync is a comprehensive web-based application for managing academic timetables, classes, labs, and faculty schedules. Built with React and Node.js, it provides an intuitive interface for administrators and teachers to manage educational scheduling.
 
-## Available Scripts
+## Features
 
-In the project directory, you can run:
+### For Administrators
+- **Class Management**: Create, edit, and delete classes with subjects, teachers, rooms, and time slots
+- **Faculty Management**: Manage teacher information and assignments
+- **Lab Management**: Schedule and manage laboratory sessions with resource allocation
+- **Timetable Generation**: AI-powered timetable optimization
+- **Department Management**: Organize subjects and departments
+- **Data Import**: Import class data from Excel files
+- **User Management**: Create and manage teacher accounts
 
-### `npm start`
+### For Teachers
+- **Daily Schedule**: View today's classes and labs at a glance
+- **Weekly Overview**: See complete weekly schedule
+- **Class Notifications**: Get notified about upcoming classes
+- **Profile Management**: Update personal information
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Technology Stack
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+- **Frontend**: React.js with Tailwind CSS
+- **Backend**: Node.js with Express.js
+- **Database**: PostgreSQL (hosted on Supabase)
+- **Authentication**: JWT-based authentication
+- **State Management**: React Context API
+- **Icons**: Font Awesome
+- **Deployment**: Modern web deployment
 
-### `npm test`
+## Getting Started
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+### Prerequisites
+- Node.js (v14 or higher)
+- npm or yarn
+- PostgreSQL database (or use the provided Supabase connection)
 
-### `npm run build`
+### Installation
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd Group_PPA
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+2. Install dependencies:
+```bash
+npm install
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+3. Set up environment variables:
+   - Copy `.env` file and configure your database connection
+   - Set JWT secret and other required variables
 
-### `npm run eject`
+4. Start the development servers:
+```bash
+# Terminal 1 - Backend
+npm run start-backend
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+# Terminal 2 - Frontend
+npm start
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+5. Open [http://localhost:3000](http://localhost:3000) to view the application.
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## Project Structure
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+```
+Group_PPA/
+├── backend/                 # Node.js backend API
+│   ├── config/             # Database configuration
+│   ├── middleware/         # Authentication middleware
+│   ├── models/             # Database models
+│   ├── routes/             # API routes
+│   └── server.js           # Main server file
+├── src/                    # React frontend
+│   ├── components/         # Reusable UI components
+│   ├── pages/             # Page components
+│   ├── context/           # React context providers
+│   ├── hooks/             # Custom React hooks
+│   ├── services/          # API service functions
+│   ├── utils/             # Utility functions
+│   └── api.js             # Main API client
+└── public/                # Static assets
+```
 
-## Learn More
+## Key Components
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+- **Header**: Navigation with search functionality and user menu
+- **Dashboard**: Overview cards and quick actions for admins
+- **Classes**: Class management interface
+- **Faculty**: Teacher management
+- **Labs**: Laboratory session management
+- **Timetable**: Visual timetable display
+- **Toast Notifications**: User feedback system
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+## API Endpoints
 
-### Code Splitting
+### Authentication
+- `POST /auth/register` - User registration
+- `POST /auth/token` - User login
+- `GET /auth/me` - Get current user info
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+### Classes
+- `GET /api/classes` - Get all classes
+- `POST /api/classes` - Create new class
+- `PUT /api/classes/:id` - Update class
+- `DELETE /api/classes/:id` - Delete class
 
-### Analyzing the Bundle Size
+### Labs
+- `GET /api/labs` - Get all lab sessions
+- `POST /api/labs` - Create new lab session
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+### Teachers
+- `GET /auth/teachers` - Get all teachers
 
-### Making a Progressive Web App
+## Contributing
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-### Advanced Configuration
+## License
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-### Deployment
+## Support
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+For support, email support@edusync.com or join our Slack channel.

@@ -1,6 +1,8 @@
+// server.js
+import 'dotenv/config'; // <-- must be first so env is ready for imported files
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { optionalAuth, authenticateToken } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
 import uploadRoutes from './routes/upload.js';
@@ -8,20 +10,24 @@ import schedulerRoutes from './routes/scheduler.js';
 import classRoutes from './routes/classes.js';
 import facultyRoutes from './routes/faculty.js';
 import labRoutes from './routes/labs.js';
+import subjectRoutes from './routes/subjects.js';
+import departmentRoutes from './routes/departments.js';
 import { User } from './models/User.js';
 import Class from './models/Class.js';
 import Faculty from './models/Faculty.js';
 import Lab from './models/Lab.js';
+import { Subject } from './models/Subject.js';
+import { Department } from './models/Department.js';
+import { seedSampleData } from './migrations/seed_sample_data.js';
 import pool from './config/database.js';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 8000;
 
+
 // Middleware
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000', 'http://127.0.0.1:3001'],
   credentials: true
 }));
 app.use(express.json());
@@ -39,6 +45,8 @@ app.use('/api/scheduler', schedulerRoutes);
 app.use('/api/classes', classRoutes);
 app.use('/api/faculty', facultyRoutes);
 app.use('/api/labs', labRoutes);
+app.use('/api/subjects', subjectRoutes);
+app.use('/api/departments', departmentRoutes);
 
 // Example of a protected route
 app.get('/api/protected', (req, res) => {
@@ -46,6 +54,115 @@ app.get('/api/protected', (req, res) => {
     return res.status(401).json({ message: 'Unauthorized: No token provided or token is invalid' });
   }
   res.json({ message: 'This is a protected route', user: req.user });
+});
+
+// Search API endpoint
+app.get('/api/search', async (req, res) => {
+  try {
+    const { q } = req.query;
+    
+    if (!q || q.trim() === '') {
+      return res.status(400).json({ error: 'Search query is required' });
+    }
+    
+    // Search across multiple entities
+    const results = [];
+    
+    // Search departments
+    try {
+      const departments = await Department.search(q);
+      departments.forEach(dept => {
+        results.push({
+          type: 'department',
+          id: dept.id,
+          title: dept.name,
+          description: dept.code,
+        });
+      });
+    } catch (error) {
+      console.error('Department search error:', error);
+    }
+    
+    // Search subjects
+    try {
+      const subjects = await Subject.search(q);
+      subjects.forEach(subject => {
+        results.push({
+          type: 'subject',
+          id: subject.id,
+          title: subject.name,
+          description: `${subject.code} - ${subject.department_name || 'No Department'}`,
+        });
+      });
+    } catch (error) {
+      console.error('Subject search error:', error);
+    }
+    
+    // Search teachers (users with role 'teacher')
+    try {
+      const query = `
+        SELECT id, name, email, role FROM users 
+        WHERE role = 'teacher' AND (name ILIKE $1 OR email ILIKE $1)
+      `;
+      const { rows: teachers } = await pool.query(query, [`%${q}%`]);
+      teachers.forEach(teacher => {
+        results.push({
+          type: 'teacher',
+          id: teacher.id,
+          title: teacher.name || teacher.email,
+          description: teacher.email,
+        });
+      });
+    } catch (error) {
+      console.error('Teacher search error:', error);
+    }
+    
+    // Search classes
+    try {
+      const query = `
+        SELECT c.*, s.name as subject_name, d.name as department_name 
+        FROM classes c
+        LEFT JOIN subjects s ON c.subject_id = s.id
+        LEFT JOIN departments d ON c.department_id = d.id
+        WHERE c.name ILIKE $1 OR c.code ILIKE $1 OR c.teacher ILIKE $1
+      `;
+      const { rows: classes } = await pool.query(query, [`%${q}%`]);
+      classes.forEach(cls => {
+        results.push({
+          type: 'class',
+          id: cls.id,
+          title: cls.name,
+          description: `${cls.code} - ${cls.subject_name || cls.department_name || 'No Department'}`,
+        });
+      });
+    } catch (error) {
+      console.error('Class search error:', error);
+    }
+    
+    // Search labs
+    try {
+      const query = `
+        SELECT * FROM labs 
+        WHERE name ILIKE $1
+      `;
+      const { rows: labs } = await pool.query(query, [`%${q}%`]);
+      labs.forEach(lab => {
+        results.push({
+          type: 'lab',
+          id: lab.id,
+          title: lab.name,
+          description: `Capacity: ${lab.capacity || 'Unknown'}`,
+        });
+      });
+    } catch (error) {
+      console.error('Lab search error:', error);
+    }
+    
+    res.json(results);
+  } catch (error) {
+    console.error('Search error:', error);
+    res.status(500).json({ error: 'Failed to perform search' });
+  }
 });
 
 // Demo endpoint to list users (remove in production)
@@ -73,6 +190,9 @@ app.use((req, res) => {
 // Function to initialize database tables
 const initializeDatabase = async () => {
   try {
+    // Create tables in order to respect foreign key constraints
+    await Department.createTable();
+    await Subject.createTable();
     await User.createTable();
     await Class.createTable();
     await Faculty.createTable();
@@ -80,6 +200,9 @@ const initializeDatabase = async () => {
     
     // Run migrations for existing tables
     await runMigrations();
+    
+    // Seed sample data
+    await seedSampleData();
     
     console.log('Database tables created or already exist.');
   } catch (error) {
@@ -91,24 +214,30 @@ const initializeDatabase = async () => {
 // Function to run database migrations
 const runMigrations = async () => {
   try {
-    // Add day and time_slot columns to classes table if they don't exist
+    // Add new columns to classes table if they don't exist
     const checkQuery = `
       SELECT column_name 
       FROM information_schema.columns 
       WHERE table_name='classes' 
-      AND column_name IN ('day', 'time_slot');
+      AND column_name IN ('day', 'time_slot', 'subject_id', 'department_id', 'duration', 'max_students');
     `;
     const result = await pool.query(checkQuery);
     const existingColumns = result.rows.map(row => row.column_name);
     
-    if (!existingColumns.includes('day')) {
-      await pool.query('ALTER TABLE classes ADD COLUMN day VARCHAR(50)');
-      console.log('✓ Added "day" column to classes table');
-    }
+    const columnsToAdd = [
+      { name: 'day', type: 'VARCHAR(50)' },
+      { name: 'time_slot', type: 'VARCHAR(50)' },
+      { name: 'subject_id', type: 'INTEGER REFERENCES subjects(id) ON DELETE SET NULL' },
+      { name: 'department_id', type: 'INTEGER REFERENCES departments(id) ON DELETE SET NULL' },
+      { name: 'duration', type: 'INTEGER DEFAULT 60' },
+      { name: 'max_students', type: 'INTEGER DEFAULT 30' }
+    ];
     
-    if (!existingColumns.includes('time_slot')) {
-      await pool.query('ALTER TABLE classes ADD COLUMN time_slot VARCHAR(50)');
-      console.log('✓ Added "time_slot" column to classes table');
+    for (const column of columnsToAdd) {
+      if (!existingColumns.includes(column.name)) {
+        await pool.query(`ALTER TABLE classes ADD COLUMN ${column.name} ${column.type}`);
+        console.log(`✓ Added "${column.name}" column to classes table`);
+      }
     }
   } catch (error) {
     console.error('Migration error:', error);
