@@ -98,6 +98,7 @@ const Login = () => {
           <p>Demo Credentials:</p>
           <p>Admin: admin@school.edu / admin123</p>
           <p>Teacher: teacher@school.edu / teacher123</p>
+          <p>Teacher: teacher@school.edu / teacher123</p>
         </div>
       </div>
     </div>
