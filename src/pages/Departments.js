@@ -1,21 +1,25 @@
 // src/pages/Departments.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Header from '../components/Header';
+import { ToastContainer } from '../components/Toast';
+import { useToast } from '../hooks/useToast';
 import { useAuth } from '../context/AuthContext';
-import { getDepartments, createDepartment, updateDepartment, deleteDepartment } from '../api';
+import { getDepartments, getTeachers, createDepartment, updateDepartment, deleteDepartment } from '../api';
 
 const Departments = () => {
   const { currentUser } = useAuth();
+  const { toasts, success, error, removeToast } = useToast();
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState(null);
+  const [teachers, setTeachers] = useState([]);
   const [formData, setFormData] = useState({
     code: '',
     name: '',
     description: '',
-    head_of_department: '',
+    head_of_department_id: '',
     contact_email: ''
   });
 
@@ -28,40 +32,129 @@ const Departments = () => {
       const fetchedDepartments = await getDepartments();
       setDepartments(fetchedDepartments);
     } catch (err) {
-      setError('Failed to fetch departments.');
+      setErrorMessage('Failed to fetch departments.');
       console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
+  const fetchTeachers = async () => {
+    try {
+      const teacherList = await getTeachers();
+      setTeachers(Array.isArray(teacherList) ? teacherList : []);
+    } catch (err) {
+      console.error('Failed to fetch teachers:', err);
+      setTeachers([]);
+    }
+  };
+
   useEffect(() => {
     fetchDepartments();
+    fetchTeachers();
   }, []);
+
+  const assignedHeadIds = useMemo(() => {
+    const ids = new Set();
+    departments.forEach((dept) => {
+      if (!dept?.head_of_department_id) return;
+      if (editingDepartment && dept.id === editingDepartment.id) return;
+      ids.add(String(dept.head_of_department_id));
+    });
+    return ids;
+  }, [departments, editingDepartment]);
+
+  const availableTeacherOptions = useMemo(() => {
+    return teachers.filter((teacher) => !assignedHeadIds.has(String(teacher.id)));
+  }, [teachers, assignedHeadIds]);
+
+  const teacherSelectOptions = useMemo(() => {
+    const options = [...availableTeacherOptions];
+
+    if (editingDepartment && formData.head_of_department_id) {
+      const exists = options.some(
+        (teacher) => String(teacher.id) === formData.head_of_department_id
+      );
+      if (!exists) {
+        const fallback = teachers.find(
+          (teacher) => String(teacher.id) === formData.head_of_department_id
+        );
+        if (fallback) {
+          options.push(fallback);
+        }
+      }
+    }
+
+    return options.sort((a, b) => {
+      const aName = a.name || a.email || '';
+      const bName = b.name || b.email || '';
+      return aName.localeCompare(bName);
+    });
+  }, [availableTeacherOptions, editingDepartment, formData.head_of_department_id, teachers]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    if (name === 'head_of_department_id') {
+      if (!value) {
+        setFormData((prev) => ({
+          ...prev,
+          head_of_department_id: '',
+          contact_email: prev.contact_email
+        }));
+        return;
+      }
+
+      const selectedTeacher = teachers.find((teacher) => String(teacher.id) === value);
+      setFormData((prev) => ({
+        ...prev,
+        head_of_department_id: value,
+        contact_email: prev.contact_email || selectedTeacher?.email || ''
+      }));
+      return;
+    }
+
     setFormData({ ...formData, [name]: value });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!isAdmin) {
-      setError('You do not have permission to perform this action.');
+      setErrorMessage('You do not have permission to perform this action.');
+      error('You do not have permission to perform this action.');
       return;
     }
 
     try {
+      setErrorMessage(null);
+      const payload = {
+        code: formData.code.trim(),
+        name: formData.name.trim(),
+        description: formData.description.trim(),
+        head_of_department_id: formData.head_of_department_id
+          ? Number(formData.head_of_department_id)
+          : null,
+        contact_email: formData.contact_email.trim()
+      };
+
+      if (!payload.code || !payload.name) {
+        setErrorMessage('Code and name are required.');
+        error('Code and name are required.');
+        return;
+      }
+
       if (editingDepartment) {
-        await updateDepartment(editingDepartment.id, formData);
+        await updateDepartment(editingDepartment.id, payload);
+        success('Department updated successfully');
       } else {
-        await createDepartment(formData);
+        await createDepartment(payload);
+        success('Department created successfully');
       }
       await fetchDepartments();
       resetForm();
     } catch (err) {
-      setError('Failed to save department.');
+      setErrorMessage('Failed to save department.');
       console.error(err);
+      error('Failed to save department.');
     }
   };
 
@@ -71,25 +164,31 @@ const Departments = () => {
       code: department.code || '',
       name: department.name || '',
       description: department.description || '',
-      head_of_department: department.head_of_department || '',
-      contact_email: department.contact_email || ''
+      head_of_department_id: department.head_of_department_id
+        ? String(department.head_of_department_id)
+        : '',
+      contact_email: department.contact_email || department.head_teacher_email || ''
     });
     setShowForm(true);
   };
 
   const handleDelete = async (id) => {
     if (!isAdmin) {
-      setError('You do not have permission to perform this action.');
+      setErrorMessage('You do not have permission to perform this action.');
+      error('You do not have permission to perform this action.');
       return;
     }
 
     if (window.confirm('Are you sure you want to delete this department?')) {
       try {
+        setErrorMessage(null);
         await deleteDepartment(id);
+        error('Department deleted successfully');
         await fetchDepartments();
       } catch (err) {
-        setError('Failed to delete department.');
+        setErrorMessage('Failed to delete department.');
         console.error(err);
+        error('Failed to delete department.');
       }
     }
   };
@@ -99,7 +198,7 @@ const Departments = () => {
       code: '',
       name: '',
       description: '',
-      head_of_department: '',
+      head_of_department_id: '',
       contact_email: ''
     });
     setEditingDepartment(null);
@@ -116,7 +215,7 @@ const Departments = () => {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading departments...</p>
+          <p className="text-slate-600">Loading class...</p>
         </div>
       </div>
     );
@@ -124,6 +223,7 @@ const Departments = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
       <Header user={currentUser} />
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -132,18 +232,18 @@ const Departments = () => {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-primary-600 to-primary-700 bg-clip-text text-transparent mb-2">
-                Department Management
+                Class Management
               </h1>
               <p className="text-slate-600 flex items-center gap-2">
                 {isAdmin ? (
                   <>
                     <i className="fas fa-university text-primary-500"></i> 
-                    Manage all academic departments and faculties
+                    Manage all academic class and faculties
                   </>
                 ) : (
                   <>
                     <i className="fas fa-building text-slate-400"></i> 
-                    View department directory (Read-only mode)
+                    View class directory (Read-only mode)
                   </>
                 )}
               </p>
@@ -154,18 +254,18 @@ const Departments = () => {
                 onClick={() => setShowForm(true)}
               >
                 <i className="fas fa-plus"></i> 
-                Add New Department
+                Add New Class
               </button>
             )}
           </div>
         </div>
 
         {/* Error Message */}
-        {error && (
+        {errorMessage && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
             <div className="flex items-center gap-2">
               <i className="fas fa-exclamation-triangle text-red-500"></i>
-              <p className="text-red-700">{error}</p>
+              <p className="text-red-700">{errorMessage}</p>
             </div>
           </div>
         )}
@@ -201,7 +301,7 @@ const Departments = () => {
                   <div className="text-lg font-bold text-slate-800">{department.code}</div>
                   <div className="text-xs text-slate-500 flex items-center gap-1">
                     <i className="fas fa-users"></i>
-                    <span>Department</span>
+                    <span>Class</span>
                   </div>
                 </div>
               </div>
@@ -214,16 +314,22 @@ const Departments = () => {
                     <i className="fas fa-code text-blue-500 w-4"></i>
                     <span><strong>Code:</strong> {department.code}</span>
                   </div>
-                  {department.head_of_department && (
+                  {(department.head_teacher_name || department.head_of_department) && (
                     <div className="flex items-center gap-2">
                       <i className="fas fa-user-tie text-green-500 w-4"></i>
-                      <span><strong>Head:</strong> {department.head_of_department}</span>
+                      <span>
+                        <strong>Teacher:</strong>{' '}
+                        {department.head_teacher_name || department.head_of_department}
+                      </span>
                     </div>
                   )}
-                  {department.contact_email && (
+                  {(department.contact_email || department.head_teacher_email) && (
                     <div className="flex items-center gap-2">
                       <i className="fas fa-envelope text-purple-500 w-4"></i>
-                      <span><strong>Email:</strong> {department.contact_email}</span>
+                      <span>
+                        <strong>Email:</strong>{' '}
+                        {department.contact_email || department.head_teacher_email}
+                      </span>
                     </div>
                   )}
                   {department.description && (
@@ -275,15 +381,15 @@ const Departments = () => {
             <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <i className="fas fa-university text-slate-400 text-3xl"></i>
             </div>
-            <h3 className="text-xl font-semibold text-slate-800 mb-2">No departments found</h3>
-            <p className="text-slate-600 mb-6">Get started by adding your first department.</p>
+            <h3 className="text-xl font-semibold text-slate-800 mb-2">No cklass found</h3>
+            <p className="text-slate-600 mb-6">Get started by adding your first class.</p>
             {isAdmin && (
               <button 
                 className="btn-primary"
                 onClick={() => setShowForm(true)}
               >
                 <i className="fas fa-plus mr-2"></i>
-                Add First Department
+                Add First class
               </button>
             )}
           </div>
@@ -311,7 +417,7 @@ const Departments = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Department Code *
+                      Class Code *
                     </label>
                     <input
                       type="text"
@@ -326,7 +432,7 @@ const Departments = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Department Name *
+                      Class Name *
                     </label>
                     <input
                       type="text"
@@ -341,16 +447,26 @@ const Departments = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Head of Department
+                      Department Head
                     </label>
-                    <input
-                      type="text"
-                      name="head_of_department"
-                      value={formData.head_of_department}
+                    <select
+                      name="head_of_department_id"
+                      value={formData.head_of_department_id}
                       onChange={handleInputChange}
                       className="input-field"
-                      placeholder="e.g., Dr. John Smith"
-                    />
+                    >
+                      <option value="">No head assigned</option>
+                      {teacherSelectOptions.map((teacher) => (
+                        <option key={teacher.id} value={teacher.id}>
+                          {teacher.name || teacher.email || `Teacher #${teacher.id}`}
+                        </option>
+                      ))}
+                    </select>
+                    {teachers.length > 0 && teacherSelectOptions.length === 0 && (
+                      <p className="text-xs text-amber-600 mt-2">
+                        All teachers are currently assigned as department heads. Remove an existing assignment to free a teacher.
+                      </p>
+                    )}
                   </div>
 
                   <div>

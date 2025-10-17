@@ -1,14 +1,46 @@
 // src/pages/Faculty.js
 import React, { useState, useEffect, useCallback } from 'react';
 import Header from '../components/Header';
+import { ToastContainer } from '../components/Toast';
+import { useToast } from '../hooks/useToast';
 import { useAuth } from '../context/AuthContext';
-import { getTeachers, createUser, updateUser, deleteUser } from '../api';
+import {
+  getTeachers,
+  getDepartments,
+  getClasses,
+  createUser,
+  updateUser,
+  deleteUser
+} from '../api';
+
+const HONORIFICS = ['mr', 'ms', 'mrs', 'miss', 'dr', 'prof', 'sir', 'madam'];
+
+const normalizeName = (value = '') => {
+  if (!value) return '';
+  return value.trim().toLowerCase();
+};
+
+const stripHonorifics = (value = '') => {
+  if (!value) return '';
+  const parts = value
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!parts.length) return '';
+  const first = parts[0].replace(/\./g, '').toLowerCase();
+  if (HONORIFICS.includes(first)) {
+    return parts.slice(1).join(' ');
+  }
+  return parts.join(' ');
+};
 
 const Faculty = () => {
   const { currentUser } = useAuth();
+  const { toasts, success, error, removeToast } = useToast();
   const [faculty, setFaculty] = useState([]);
+  const [enrichedFaculty, setEnrichedFaculty] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [formData, setFormData] = useState({
@@ -23,16 +55,81 @@ const Faculty = () => {
 
   const fetchFaculty = useCallback(async () => {
     if (!currentUser) {
-      setError('Please log in to view users.');
+      setErrorMessage('Please log in to view users.');
       setLoading(false);
       return;
     }
     try {
       setLoading(true);
-      const fetchedFaculty = await getTeachers();
-      setFaculty(fetchedFaculty);
+      const [teacherData, departmentData, classData] = await Promise.all([
+        getTeachers(),
+        getDepartments(),
+        getClasses()
+      ]);
+
+      const teacherList = Array.isArray(teacherData) ? teacherData : [];
+      const departmentList = Array.isArray(departmentData) ? departmentData : [];
+      const classList = Array.isArray(classData) ? classData : [];
+
+
+      const deptMap = new Map();
+      departmentList.forEach((dept) => {
+        if (!dept.head_of_department_id) return;
+        const existing = deptMap.get(dept.head_of_department_id) || [];
+        existing.push({ id: dept.id, name: dept.name, code: dept.code });
+        deptMap.set(dept.head_of_department_id, existing);
+      });
+
+      const classMapById = new Map();
+      const classMapByName = new Map();
+
+      classList.forEach((cls) => {
+        const label = cls.name || cls.subject_name || cls.subject || cls.code || 'Class';
+        if (cls.teacher_id) {
+          const existing = classMapById.get(cls.teacher_id) || new Set();
+          existing.add(label);
+          classMapById.set(cls.teacher_id, existing);
+        }
+
+        if (cls.teacher) {
+          const baseName = normalizeName(cls.teacher);
+          const strippedName = normalizeName(stripHonorifics(cls.teacher));
+          [baseName, strippedName].filter(Boolean).forEach((key) => {
+            const existing = classMapByName.get(key) || new Set();
+            existing.add(label);
+            classMapByName.set(key, existing);
+          });
+        }
+      });
+
+      const enriched = teacherList.map((teacher) => {
+        const departmentsLed = deptMap.get(teacher.id) || [];
+        const idSubjects = classMapById.get(teacher.id);
+        let taughtSubjects = idSubjects ? Array.from(idSubjects) : [];
+
+        if (!taughtSubjects.length && teacher.name) {
+          const key = normalizeName(teacher.name);
+          const stripped = normalizeName(stripHonorifics(teacher.name));
+          const nameSubjects =
+            classMapByName.get(stripped) || classMapByName.get(key) || null;
+          if (nameSubjects) {
+            taughtSubjects = Array.from(nameSubjects);
+          }
+        }
+
+        taughtSubjects.sort((a, b) => a.localeCompare(b));
+
+        return {
+          ...teacher,
+          departmentsLed,
+          taughtSubjects
+        };
+      });
+
+      setFaculty(teacherList);
+      setEnrichedFaculty(enriched);
     } catch (err) {
-      setError('Failed to fetch users.');
+      setErrorMessage('Failed to fetch users.');
       console.error(err);
     } finally {
       setLoading(false);
@@ -59,16 +156,21 @@ const Faculty = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      setErrorMessage(null);
       if (editingTeacher) {
-        await updateUser(editingTeacher.id, formData);
+        const { name, email, role } = formData;
+        await updateUser(editingTeacher.id, { name, email, role });
+        success('Faculty member updated successfully');
       } else {
         await createUser(formData);
+        success('Faculty member added');
       }
       await fetchFaculty();
       resetForm();
     } catch (err) {
-      setError('Failed to save user.');
+      setErrorMessage('Failed to save user.');
       console.error(err);
+      error('Failed to save user.');
     }
   };
 
@@ -86,17 +188,25 @@ const Faculty = () => {
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this faculty member?')) {
       try {
+        setErrorMessage(null);
         await deleteUser(id);
         await fetchFaculty();
+        error('Faculty member removed');
       } catch (err) {
-        setError('Failed to delete user.');
+        setErrorMessage('Failed to delete user.');
         console.error(err);
+        error('Failed to delete user.');
       }
     }
   };
 
   const getColorVariant = (index) => {
-    const variants = ['blue', 'green', 'orange', 'purple'];
+    const variants = [
+      'from-sky-400 via-sky-500 to-blue-600',
+      'from-emerald-400 via-emerald-500 to-teal-600',
+      'from-amber-400 via-orange-500 to-rose-500',
+      'from-purple-400 via-fuchsia-500 to-indigo-600'
+    ];
     return variants[index % variants.length];
   };
 
@@ -113,6 +223,7 @@ const Faculty = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
       <Header user={currentUser} />
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -150,72 +261,108 @@ const Faculty = () => {
         </div>
 
         {/* Error Message */}
-        {error && (
+        {errorMessage && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
             <div className="flex items-center gap-2">
               <i className="fas fa-exclamation-triangle text-red-500"></i>
-              <p className="text-red-700">{error}</p>
+              <p className="text-red-700">{errorMessage}</p>
             </div>
           </div>
         )}
 
         {/* Faculty Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {faculty.map((teacher, index) => (
+          {enrichedFaculty.map((teacher, index) => (
             <div 
               key={teacher.id} 
-              className={`group relative bg-white/60 backdrop-blur-sm rounded-2xl border border-white/20 p-6 hover:bg-white/80 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ${
-                isAdmin ? 'cursor-pointer' : 'cursor-default'
-              }`}
+              className={`glass-card group ${isAdmin ? 'glass-card--interactive' : ''}`}
               onClick={() => isAdmin && handleEdit(teacher)}
             >
               {/* Header */}
-              <div className="flex items-start justify-between mb-4">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
-                  getColorVariant(index) === 'blue' ? 'bg-gradient-to-r from-blue-500 to-blue-600' :
-                  getColorVariant(index) === 'green' ? 'bg-gradient-to-r from-green-500 to-green-600' :
-                  getColorVariant(index) === 'orange' ? 'bg-gradient-to-r from-orange-500 to-orange-600' :
-                  getColorVariant(index) === 'purple' ? 'bg-gradient-to-r from-purple-500 to-purple-600' :
-                  'bg-gradient-to-r from-slate-500 to-slate-600'
-                }`}>
-                  <i className="fas fa-chalkboard-teacher text-white text-lg"></i>
+              <div className="flex items-start justify-between mb-6">
+                <div className="relative">
+                  <span className="absolute -top-1 -left-1 h-14 w-14 rounded-full bg-primary-500/20 blur-2xl"></span>
+                  <div className={`relative flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${getColorVariant(index)} text-white shadow-lg`}>
+                    <i className="fas fa-chalkboard-teacher text-lg"></i>
+                  </div>
                 </div>
                 
                 <div className="text-right">
-                  <div className={`px-2 py-1 rounded-lg text-xs font-medium ${
-                    teacher.role === 'admin' || teacher.role === 'ADMIN' 
-                      ? 'bg-red-100 text-red-700' 
-                      : 'bg-blue-100 text-blue-700'
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Role</p>
+                  <div className={`mt-1 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
+                    teacher.role === 'admin' || teacher.role === 'ADMIN'
+                      ? 'bg-rose-50 text-rose-500'
+                      : 'bg-sky-50 text-sky-600'
                   }`}>
+                    <i className={`fas ${teacher.role === 'admin' || teacher.role === 'ADMIN' ? 'fa-crown' : 'fa-user'}`}></i>
                     {teacher.role?.toUpperCase() || 'TEACHER'}
                   </div>
                 </div>
               </div>
               
               {/* Body */}
-              <div className="mb-4">
-                <h4 className="font-semibold text-slate-800 mb-2">{teacher.name}</h4>
-                <div className="space-y-2 text-sm text-slate-600">
-                  <div className="flex items-center gap-2">
-                    <i className="fas fa-envelope text-slate-400 w-4"></i>
-                    <span className="truncate">{teacher.email}</span>
+              <div className="mb-5 space-y-3">
+                <div>
+                  <h4 className="text-xl font-semibold text-slate-800">{teacher.name}</h4>
+                  <p className="text-sm text-slate-500">Dedicated educator shaping the future classroom experience.</p>
+                </div>
+                <div className="space-y-3 text-sm text-slate-600">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                      <i className="fas fa-envelope text-xs"></i>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-400">Email</p>
+                      <p className="text-sm font-medium text-slate-700 truncate">{teacher.email}</p>
+                    </div>
                   </div>
-                  {teacher.department && (
-                    <div className="flex items-center gap-2">
-                      <i className="fas fa-building text-blue-500 w-4"></i>
-                      <span>{teacher.department}</span>
+                  {(teacher.departmentsLed?.length || teacher.department) && (
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-50 text-sky-500">
+                        <i className="fas fa-building text-xs"></i>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Departments</p>
+                        {teacher.departmentsLed?.length ? (
+                          <ul className="text-sm font-medium text-slate-700 space-y-1">
+                            {teacher.departmentsLed.map((dept) => (
+                              <li key={dept.id}>{dept.name}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-sm font-medium text-slate-700">
+                            {teacher.department}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   )}
-                  {teacher.specialization && (
-                    <div className="flex items-center gap-2">
-                      <i className="fas fa-graduation-cap text-green-500 w-4"></i>
-                      <span>{teacher.specialization}</span>
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-500">
+                      <i className="fas fa-graduation-cap text-xs"></i>
                     </div>
-                  )}
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-400">Subjects / Classes</p>
+                      {teacher.taughtSubjects?.length ? (
+                        <ul className="text-sm font-medium text-slate-700 space-y-1">
+                          {teacher.taughtSubjects.map((subject, idx) => (
+                            <li key={idx}>{subject}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-slate-500">No classes assigned yet.</p>
+                      )}
+                    </div>
+                  </div>
                   {teacher.phone && (
-                    <div className="flex items-center gap-2">
-                      <i className="fas fa-phone text-orange-500 w-4"></i>
-                      <span>{teacher.phone}</span>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-50 text-amber-500">
+                        <i className="fas fa-phone text-xs"></i>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Contact</p>
+                        <p className="text-sm font-medium text-slate-700">{teacher.phone}</p>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -223,27 +370,32 @@ const Faculty = () => {
 
               {/* Footer */}
               {isAdmin && (
-                <div className="flex justify-end gap-2">
-                  <button 
-                    className="p-2 text-slate-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors duration-200"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEdit(teacher);
-                    }}
-                    title="Edit"
-                  >
-                    <i className="fas fa-edit"></i>
-                  </button>
-                  <button 
-                    className="p-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(teacher.id);
-                    }}
-                    title="Delete"
-                  >
-                    <i className="fas fa-trash"></i>
-                  </button>
+                <div className="flex items-center justify-between border-t border-white/20 pt-4">
+                  <span className="text-xs uppercase tracking-wide text-slate-400">Manage profile</span>
+                  <div className="flex gap-2">
+                    <button 
+                      className="inline-flex items-center gap-2 rounded-xl bg-primary-50 px-3 py-2 text-sm font-medium text-primary-600 transition-colors hover:bg-primary-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEdit(teacher);
+                      }}
+                      title="Edit"
+                    >
+                      <i className="fas fa-edit"></i>
+                      Edit
+                    </button>
+                    <button 
+                      className="inline-flex items-center gap-2 rounded-xl bg-rose-50 px-3 py-2 text-sm font-medium text-rose-500 transition-colors hover:bg-rose-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(teacher.id);
+                      }}
+                      title="Delete"
+                    >
+                      <i className="fas fa-trash"></i>
+                      Delete
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -333,19 +485,27 @@ const Faculty = () => {
                     </select>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      {editingTeacher ? 'New Password (leave blank to keep current)' : 'Password *'}
-                    </label>
-                    <input
-                      type="password"
-                      required={!editingTeacher}
-                      value={formData.password}
-                      onChange={(e) => setFormData({...formData, password: e.target.value})}
-                      className="input-field"
-                      placeholder="Enter password"
-                    />
-                  </div>
+                  {!editingTeacher && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Password *
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        value={formData.password}
+                        onChange={(e) => setFormData({...formData, password: e.target.value})}
+                        className="input-field"
+                        placeholder="Enter password"
+                      />
+                    </div>
+                  )}
+
+                  {editingTeacher && (
+                    <div className="bg-blue-50 border border-blue-200 text-blue-700 text-sm rounded-xl p-4">
+                      Passwords can no longer be updated by admins. Ask the teacher to use the &ldquo;Forgot password&rdquo; option on the sign-in page.
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex justify-end gap-4 pt-6 border-t border-slate-200">

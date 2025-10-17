@@ -1,22 +1,24 @@
 // src/pages/Subjects.js
 import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
+import { ToastContainer } from '../components/Toast';
+import { useToast } from '../hooks/useToast';
 import { useAuth } from '../context/AuthContext';
 import { getSubjects, createSubject, updateSubject, deleteSubject, getDepartments } from '../api';
 
 const Subjects = () => {
   const { currentUser } = useAuth();
+  const { toasts, success, error, removeToast } = useToast();
   const [subjects, setSubjects] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingSubject, setEditingSubject] = useState(null);
   const [formData, setFormData] = useState({
     code: '',
     name: '',
     description: '',
-    credits: 3,
     department_id: ''
   });
 
@@ -29,7 +31,7 @@ const Subjects = () => {
       const fetchedSubjects = await getSubjects();
       setSubjects(fetchedSubjects);
     } catch (err) {
-      setError('Failed to fetch subjects.');
+      setErrorMessage('Failed to fetch subjects.');
       console.error(err);
     } finally {
       setLoading(false);
@@ -53,16 +55,33 @@ const Subjects = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      setErrorMessage(null);
+      const payload = {
+        code: formData.code.trim(),
+        name: formData.name.trim(),
+        description: formData.description.trim(),
+        department_id: formData.department_id ? Number(formData.department_id) : null
+      };
+
+      if (!payload.code || !payload.name) {
+        setErrorMessage('Code and name are required.');
+        error('Code and name are required.');
+        return;
+      }
+
       if (editingSubject) {
-        await updateSubject(editingSubject.id, formData);
+        await updateSubject(editingSubject.id, payload);
+        success('Subject updated successfully');
       } else {
-        await createSubject(formData);
+        await createSubject(payload);
+        success('Subject created successfully');
       }
       await fetchSubjects();
       resetForm();
     } catch (err) {
-      setError('Failed to save subject.');
+      setErrorMessage('Failed to save subject.');
       console.error(err);
+      error('Failed to save subject.');
     }
   };
 
@@ -72,8 +91,7 @@ const Subjects = () => {
       code: subject.code || '',
       name: subject.name || '',
       description: subject.description || '',
-      credits: subject.credits || 3,
-      department_id: subject.department_id || ''
+      department_id: subject.department_id ? String(subject.department_id) : ''
     });
     setShowForm(true);
   };
@@ -81,11 +99,14 @@ const Subjects = () => {
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this subject?')) {
       try {
+        setErrorMessage(null);
         await deleteSubject(id);
+        error('Subject deleted successfully');
         await fetchSubjects();
       } catch (err) {
-        setError('Failed to delete subject.');
+        setErrorMessage('Failed to delete subject.');
         console.error(err);
+        error('Failed to delete subject.');
       }
     }
   };
@@ -95,7 +116,6 @@ const Subjects = () => {
       code: '',
       name: '',
       description: '',
-      credits: 3,
       department_id: ''
     });
     setEditingSubject(null);
@@ -103,8 +123,17 @@ const Subjects = () => {
   };
 
   const getColorVariant = (index) => {
-    const variants = ['blue', 'green', 'orange', 'purple', 'red', 'indigo', 'pink', 'teal'];
-    return variants[index % variants.length];
+    const gradients = [
+      'from-blue-500 via-blue-500 to-indigo-600',
+      'from-emerald-400 via-emerald-500 to-teal-600',
+      'from-amber-400 via-orange-500 to-rose-500',
+      'from-purple-400 via-fuchsia-500 to-indigo-600',
+      'from-rose-400 via-red-500 to-amber-500',
+      'from-indigo-400 via-blue-500 to-purple-600',
+      'from-pink-400 via-fuchsia-500 to-rose-500',
+      'from-teal-400 via-cyan-500 to-sky-500'
+    ];
+    return gradients[index % gradients.length];
   };
 
   if (loading) {
@@ -120,6 +149,7 @@ const Subjects = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
       <Header user={currentUser} />
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -157,11 +187,11 @@ const Subjects = () => {
         </div>
 
         {/* Error Message */}
-        {error && (
+        {errorMessage && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
             <div className="flex items-center gap-2">
               <i className="fas fa-exclamation-triangle text-red-500"></i>
-              <p className="text-red-700">{error}</p>
+              <p className="text-red-700">{errorMessage}</p>
             </div>
           </div>
         )}
@@ -171,61 +201,50 @@ const Subjects = () => {
           {subjects.map((subject, index) => (
             <div 
               key={subject.id} 
-              className={`group relative bg-white/60 backdrop-blur-sm rounded-2xl border border-white/20 p-6 hover:bg-white/80 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ${
-                isAdmin ? 'cursor-pointer' : 'cursor-default'
-              }`}
+              className={`glass-card group ${isAdmin ? 'glass-card--interactive' : ''}`}
               onClick={() => isAdmin && handleEdit(subject)}
             >
               {/* Header */}
-              <div className="flex items-start justify-between mb-4">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
-                  getColorVariant(index) === 'blue' ? 'bg-gradient-to-r from-blue-500 to-blue-600' :
-                  getColorVariant(index) === 'green' ? 'bg-gradient-to-r from-green-500 to-green-600' :
-                  getColorVariant(index) === 'orange' ? 'bg-gradient-to-r from-orange-500 to-orange-600' :
-                  getColorVariant(index) === 'purple' ? 'bg-gradient-to-r from-purple-500 to-purple-600' :
-                  getColorVariant(index) === 'red' ? 'bg-gradient-to-r from-red-500 to-red-600' :
-                  getColorVariant(index) === 'indigo' ? 'bg-gradient-to-r from-indigo-500 to-indigo-600' :
-                  getColorVariant(index) === 'pink' ? 'bg-gradient-to-r from-pink-500 to-pink-600' :
-                  'bg-gradient-to-r from-teal-500 to-teal-600'
-                }`}>
-                  <i className="fas fa-book text-white text-lg"></i>
+              <div className="flex items-start justify-between mb-6">
+                <div className="relative">
+                  <span className="absolute -top-1 -left-1 h-14 w-14 rounded-full bg-primary-500/20 blur-2xl"></span>
+                  <div className={`relative flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${getColorVariant(index)} text-white shadow-lg`}>
+                    <i className="fas fa-book text-lg"></i>
+                  </div>
                 </div>
                 
                 <div className="text-right">
-                  <div className="text-lg font-bold text-slate-800">{subject.code}</div>
-                  <div className="text-xs text-slate-500 flex items-center gap-1">
-                    <i className="fas fa-star"></i>
-                    <span>{subject.credits} credits</span>
-                  </div>
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Subject code</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-800">{subject.code}</p>
                 </div>
               </div>
               
               {/* Body */}
-              <div className="mb-4">
-                <h4 className="font-semibold text-slate-800 mb-3">{subject.name}</h4>
-                <div className="space-y-2 text-sm text-slate-600">
-                  <div className="flex items-center gap-2">
-                    <i className="fas fa-code text-blue-500 w-4"></i>
-                    <span><strong>Code:</strong> {subject.code}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <i className="fas fa-star text-yellow-500 w-4"></i>
-                    <span><strong>Credits:</strong> {subject.credits}</span>
+              <div className="mb-5 space-y-3">
+                <h4 className="text-xl font-semibold text-slate-800">{subject.name}</h4>
+                {subject.description && (
+                  <p className="text-sm text-slate-500 leading-relaxed">
+                    {subject.description}
+                  </p>
+                )}
+                <div className="space-y-3 text-sm text-slate-600">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-500">
+                      <i className="fas fa-code text-xs"></i>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-400">Code</p>
+                      <p className="text-sm font-medium text-slate-700">{subject.code}</p>
+                    </div>
                   </div>
                   {subject.department_name && (
-                    <div className="flex items-center gap-2">
-                      <i className="fas fa-building text-green-500 w-4"></i>
-                      <span><strong>Department:</strong> {subject.department_name}</span>
-                    </div>
-                  )}
-                  {subject.description && (
-                    <div className="flex items-start gap-2">
-                      <i className="fas fa-info-circle text-purple-500 w-4 mt-1"></i>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-500">
+                        <i className="fas fa-building text-xs"></i>
+                      </div>
                       <div>
-                        <span className="font-medium">Description:</span>
-                        <p className="text-xs text-slate-500 mt-1 line-clamp-2">
-                          {subject.description}
-                        </p>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Department</p>
+                        <p className="text-sm font-medium text-slate-700">{subject.department_name}</p>
                       </div>
                     </div>
                   )}
@@ -234,27 +253,32 @@ const Subjects = () => {
 
               {/* Footer */}
               {isAdmin && (
-                <div className="flex justify-end gap-2">
-                  <button 
-                    className="p-2 text-slate-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors duration-200"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEdit(subject);
-                    }}
-                    title="Edit"
-                  >
-                    <i className="fas fa-edit"></i>
-                  </button>
-                  <button 
-                    className="p-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(subject.id);
-                    }}
-                    title="Delete"
-                  >
-                    <i className="fas fa-trash"></i>
-                  </button>
+                <div className="flex items-center justify-between border-t border-white/20 pt-4">
+                  <span className="text-xs uppercase tracking-wide text-slate-400">Manage subject</span>
+                  <div className="flex gap-2">
+                    <button 
+                      className="inline-flex items-center gap-2 rounded-xl bg-primary-50 px-3 py-2 text-sm font-medium text-primary-600 transition-colors hover:bg-primary-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEdit(subject);
+                      }}
+                      title="Edit"
+                    >
+                      <i className="fas fa-edit"></i>
+                      Edit
+                    </button>
+                    <button 
+                      className="inline-flex items-center gap-2 rounded-xl bg-rose-50 px-3 py-2 text-sm font-medium text-rose-500 transition-colors hover:bg-rose-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(subject.id);
+                      }}
+                      title="Delete"
+                    >
+                      <i className="fas fa-trash"></i>
+                      Delete
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -326,21 +350,6 @@ const Subjects = () => {
                       onChange={(e) => setFormData({...formData, name: e.target.value})}
                       className="input-field"
                       placeholder="e.g., Introduction to Programming"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Credits *
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="1"
-                      max="6"
-                      value={formData.credits}
-                      onChange={(e) => setFormData({...formData, credits: parseInt(e.target.value)})}
-                      className="input-field"
                     />
                   </div>
 

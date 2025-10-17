@@ -1,69 +1,24 @@
 // src/components/Sidebar.js
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { search } from '../api';
 
 const Sidebar = ({ isOpen, onClose, notifications = [], onNotificationDismiss }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentUser } = useAuth();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [showSearchResults, setShowSearchResults] = useState(false);
-  const [searchLoading, setSearchLoading] = useState(false);
+  const role = currentUser?.role?.toLowerCase();
+  const isAdmin = role === 'admin';
+  const isTeacher = role === 'teacher';
   // notifications UI not used in sidebar; keep minimal state
   const [activeSection, setActiveSection] = useState('navigation');
-
-  // Ensure notifications is always an array
-  const safeNotifications = Array.isArray(notifications) ? notifications : [];
-  const unreadNotifications = safeNotifications.filter(n => !n.read).length;
-
-  const handleSearch = async (e) => {
-    if (e.key === 'Enter' && searchQuery.trim()) {
-      setSearchLoading(true);
-      try {
-        const results = await search(searchQuery);
-        setSearchResults(results);
-        setShowSearchResults(true);
-      } catch (error) {
-        console.error('Search failed:', error);
-        setSearchResults([]);
-        setShowSearchResults(true);
-      } finally {
-        setSearchLoading(false);
-      }
-    }
-  };
-
-  const handleSearchInputChange = (e) => {
-    setSearchQuery(e.target.value);
-    if (e.target.value === '') {
-      setShowSearchResults(false);
-      setSearchResults([]);
-    }
-  };
-
-  const handleSearchResultClick = (result) => {
-    // Navigate based on result type and ID
-    if (result.type === 'class') {
-      navigate(`/classes?id=${result.id}`);
-    } else if (result.type === 'teacher') {
-      navigate(`/faculty?id=${result.id}`);
-    } else if (result.type === 'subject') {
-      navigate(`/subjects?id=${result.id}`);
-    } else if (result.type === 'department') {
-      navigate(`/departments?id=${result.id}`);
-    } else if (result.type === 'lab') {
-      navigate(`/labs?id=${result.id}`);
-    }
-    setShowSearchResults(false);
-    setSearchQuery('');
-    onClose(); // Close sidebar after navigation
-  };
 
   const handleNavigation = (path) => {
     navigate(path);
     onClose();
+    setTimeout(() => {
+      window.location.reload();
+    }, 0);
   };
 
   const handleLogout = () => {
@@ -74,13 +29,28 @@ const Sidebar = ({ isOpen, onClose, notifications = [], onNotificationDismiss })
   const navigationItems = [
     { path: '/dashboard', icon: 'fas fa-chart-pie', label: 'Dashboard', color: 'blue' },
     { path: '/timetable', icon: 'fas fa-table', label: 'Timetable', color: 'green' },
-    { path: '/classes', icon: 'fas fa-chalkboard', label: 'Classes', color: 'purple' },
-    { path: '/faculty', icon: 'fas fa-chalkboard-teacher', label: 'Faculty', color: 'orange' },
-    { path: '/labs', icon: 'fas fa-flask', label: 'Labs', color: 'red' },
-    { path: '/subjects', icon: 'fas fa-book-open', label: 'Subjects', color: 'indigo' },
-    { path: '/departments', icon: 'fas fa-building', label: 'Departments', color: 'teal' },
-    { path: '/import', icon: 'fas fa-upload', label: 'Import', color: 'pink' }
+    { path: '/schedule-change-requests', icon: 'fas fa-exchange-alt', label: 'Schedule Changes', color: 'teal' },
+    { path: '/leave-requests', icon: 'fas fa-plane-departure', label: 'Leave Requests', color: 'yellow' }
   ];
+
+  if (!isTeacher) {
+    navigationItems.splice(2, 0,
+      { path: '/classes', icon: 'fas fa-chalkboard', label: 'Subjects', color: 'purple' },
+      { path: '/faculty', icon: 'fas fa-chalkboard-teacher', label: 'Faculty', color: 'orange' },
+      { path: '/labs', icon: 'fas fa-flask', label: 'Labs', color: 'red' },
+      { path: '/subjects', icon: 'fas fa-book-open', label: 'Subject Library', color: 'indigo' },
+      { path: '/departments', icon: 'fas fa-building', label: 'Departments', color: 'teal' }
+    );
+  }
+
+  if (isAdmin) {
+    navigationItems.push({
+      path: '/class-automation',
+      icon: 'fas fa-robot',
+      label: 'Class Automation',
+      color: 'slate'
+    });
+  }
 
   const getColorClasses = (color) => {
     const colorMap = {
@@ -91,7 +61,9 @@ const Sidebar = ({ isOpen, onClose, notifications = [], onNotificationDismiss })
       red: 'from-red-500 to-red-600',
       indigo: 'from-indigo-500 to-indigo-600',
       teal: 'from-teal-500 to-teal-600',
-      pink: 'from-pink-500 to-pink-600'
+      yellow: 'from-yellow-500 to-yellow-600',
+      pink: 'from-pink-500 to-pink-600',
+      slate: 'from-slate-500 to-slate-700'
     };
     return colorMap[color] || 'from-slate-500 to-slate-600';
   };
@@ -128,69 +100,6 @@ const Sidebar = ({ isOpen, onClose, notifications = [], onNotificationDismiss })
               </button>
             </div>
 
-            {/* Search */}
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <i className="fas fa-search text-slate-400"></i>
-              </div>
-              <input
-                type="text"
-                placeholder="Search timetables, teachers..."
-                value={searchQuery}
-                onChange={handleSearchInputChange}
-                onKeyPress={handleSearch}
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent placeholder-slate-400"
-              />
-              {searchLoading && (
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
-                </div>
-              )}
-            </div>
-
-            {/* Search Results */}
-            {showSearchResults && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-white/95 backdrop-blur-md rounded-xl shadow-xl border border-white/20 z-50 max-h-64 overflow-y-auto">
-                {searchResults.length > 0 ? (
-                  <div className="p-2">
-                    {searchResults.map((result, index) => (
-                      <button
-                        key={index}
-                        onClick={() => handleSearchResultClick(result)}
-                        className="w-full flex items-center space-x-3 px-3 py-2 text-left hover:bg-slate-50 rounded-lg transition-colors"
-                      >
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                          result.type === 'class' ? 'bg-blue-100 text-blue-600' :
-                          result.type === 'teacher' ? 'bg-green-100 text-green-600' :
-                          result.type === 'subject' ? 'bg-purple-100 text-purple-600' :
-                          result.type === 'department' ? 'bg-orange-100 text-orange-600' :
-                          result.type === 'lab' ? 'bg-red-100 text-red-600' :
-                          'bg-slate-100 text-slate-600'
-                        }`}>
-                          <i className={`${
-                            result.type === 'class' ? 'fas fa-chalkboard' :
-                            result.type === 'teacher' ? 'fas fa-chalkboard-teacher' :
-                            result.type === 'subject' ? 'fas fa-book-open' :
-                            result.type === 'department' ? 'fas fa-building' :
-                            result.type === 'lab' ? 'fas fa-flask' :
-                            'fas fa-search'
-                          } text-sm`}></i>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-800 truncate">{result.title}</p>
-                          <p className="text-xs text-slate-500 truncate">{result.description}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-4 text-center text-slate-500">
-                    <i className="fas fa-search text-2xl mb-2"></i>
-                    <p>No results found for "{searchQuery}"</p>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
           {/* Navigation Tabs */}
@@ -233,7 +142,7 @@ const Sidebar = ({ isOpen, onClose, notifications = [], onNotificationDismiss })
                       key={item.path}
                       onClick={() => handleNavigation(item.path)}
                       className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
-                        window.location.pathname === item.path
+                        location.pathname === item.path
                           ? 'bg-primary-50 text-primary-700 border border-primary-200'
                           : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                       }`}
@@ -270,7 +179,7 @@ const Sidebar = ({ isOpen, onClose, notifications = [], onNotificationDismiss })
                   </div>
                   <div className="text-sm text-slate-600 space-y-1">
                     <p><i className="fas fa-envelope mr-2"></i>{currentUser?.email || 'admin@example.com'}</p>
-                    <p><i className="fas fa-calendar mr-2"></i>Member since 2024</p>
+                    {/* <p><i className="fas fa-calendar mr-2"></i>Member since 2024</p> */}
                   </div>
                 </div>
 

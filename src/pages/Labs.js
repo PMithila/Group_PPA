@@ -1,19 +1,21 @@
 // src/pages/Labs.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Header from '../components/Header';
+import { ToastContainer } from '../components/Toast';
+import { useToast } from '../hooks/useToast';
 import { useAuth } from '../context/AuthContext';
 import { getLabs, createLab, updateLab, deleteLab, getTeachers, getSubjects, getDepartments } from '../api';
 
 const Labs = () => {
   const { currentUser } = useAuth();
+  const { toasts, success, error, removeToast } = useToast();
   const [labs, setLabs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingLab, setEditingLab] = useState(null);
 
   const [formData, setFormData] = useState({
-    name: '',
     capacity: 0,
     resources: [],
     subject_id: '',
@@ -22,7 +24,6 @@ const Labs = () => {
     room: '',
     day: '',
     time_slot: '',
-    duration: 60,
     max_students: 30,
   });
 
@@ -40,6 +41,15 @@ const Labs = () => {
   const [teachers, setTeachers] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [departments, setDepartments] = useState([]);
+  const subjectsById = useMemo(() => {
+    const map = {};
+    subjects.forEach(subject => {
+      if (subject?.id != null) {
+        map[String(subject.id)] = subject;
+      }
+    });
+    return map;
+  }, [subjects]);
 
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'ADMIN';
 
@@ -49,7 +59,7 @@ const Labs = () => {
       const fetchedLabs = await getLabs();
       setLabs(fetchedLabs);
     } catch (err) {
-      setError('Failed to fetch labs.');
+      setErrorMessage('Failed to fetch labs.');
       console.error(err);
     } finally {
       setLoading(false);
@@ -92,38 +102,52 @@ const Labs = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    if (name === 'subject_id') {
+      const selectedSubject = subjectsById[value];
+      setFormData(prev => ({
+        ...prev,
+        subject_id: value,
+        department_id: selectedSubject?.department_id
+          ? String(selectedSubject.department_id)
+          : prev.department_id
+      }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      setErrorMessage(null);
       if (editingLab) {
         await updateLab(editingLab.id, formData);
+        success('Lab updated successfully');
       } else {
         await createLab(formData);
+        success('Lab created successfully');
       }
       await fetchLabs();
       resetForm();
     } catch (err) {
-      setError('Failed to save lab.');
-      console.error(err);
+      const message = err?.response?.data?.error || 'Failed to save lab.';
+      setErrorMessage(message);
+      console.error('Failed to save lab:', err);
+      error(message || 'Failed to save lab.');
     }
   };
 
   const handleEdit = (lab) => {
     setEditingLab(lab);
     setFormData({
-      name: lab.name || '',
       capacity: lab.capacity || 0,
       resources: lab.resources || [],
-      subject_id: lab.subject_id || '',
-      department_id: lab.department_id || '',
-      teacher: lab.teacher || '',
+      subject_id: lab.subject_id ? String(lab.subject_id) : '',
+      department_id: lab.department_id ? String(lab.department_id) : '',
+      teacher: lab.teacher ? String(lab.teacher) : '',
       room: lab.room || '',
       day: lab.day || '',
       time_slot: lab.time_slot || '',
-      duration: lab.duration || 60,
       max_students: lab.max_students || 30,
     });
     setShowForm(true);
@@ -132,18 +156,20 @@ const Labs = () => {
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this lab?')) {
       try {
+        setErrorMessage(null);
         await deleteLab(id);
+        error('Lab deleted successfully');
         await fetchLabs();
       } catch (err) {
-        setError('Failed to delete lab.');
+        setErrorMessage('Failed to delete lab.');
         console.error(err);
+        error('Failed to delete lab.');
       }
     }
   };
 
   const resetForm = () => {
     setFormData({
-      name: '',
       capacity: 0,
       resources: [],
       subject_id: '',
@@ -152,7 +178,6 @@ const Labs = () => {
       room: '',
       day: '',
       time_slot: '',
-      duration: 60,
       max_students: 30,
     });
     setEditingLab(null);
@@ -160,7 +185,14 @@ const Labs = () => {
   };
 
   const getColorVariant = (index) => {
-    const variants = ['blue', 'green', 'orange', 'purple', 'red', 'indigo'];
+    const variants = [
+      'from-violet-400 via-purple-500 to-indigo-600',
+      'from-teal-400 via-emerald-500 to-lime-500',
+      'from-rose-400 via-orange-500 to-amber-500',
+      'from-sky-400 via-blue-500 to-cyan-500',
+      'from-fuchsia-400 via-rose-500 to-red-500',
+      'from-indigo-400 via-purple-500 to-blue-600'
+    ];
     return variants[index % variants.length];
   };
 
@@ -177,6 +209,7 @@ const Labs = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
       <Header user={currentUser} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -214,11 +247,11 @@ const Labs = () => {
         </div>
 
         {/* Error */}
-        {error && (
+        {errorMessage && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
             <div className="flex items-center gap-2">
               <i className="fas fa-exclamation-triangle text-red-500"></i>
-              <p className="text-red-700">{error}</p>
+              <p className="text-red-700">{errorMessage}</p>
             </div>
           </div>
         )}
@@ -228,97 +261,118 @@ const Labs = () => {
           {labs.map((lab, index) => (
             <div
               key={lab.id}
-              className={`group relative bg-white/60 backdrop-blur-sm rounded-2xl border border-white/20 p-6 hover:bg-white/80 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ${
-                isAdmin ? 'cursor-pointer' : 'cursor-default'
-              }`}
+              className={`glass-card group ${isAdmin ? 'glass-card--interactive' : ''}`}
               onClick={() => isAdmin && handleEdit(lab)}
             >
-              <div className="flex items-start justify-between mb-4">
-                <div
-                  className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
-                    getColorVariant(index) === 'blue'
-                      ? 'bg-gradient-to-r from-blue-500 to-blue-600'
-                      : getColorVariant(index) === 'green'
-                      ? 'bg-gradient-to-r from-green-500 to-green-600'
-                      : getColorVariant(index) === 'orange'
-                      ? 'bg-gradient-to-r from-orange-500 to-orange-600'
-                      : getColorVariant(index) === 'purple'
-                      ? 'bg-gradient-to-r from-purple-500 to-purple-600'
-                      : getColorVariant(index) === 'red'
-                      ? 'bg-gradient-to-r from-red-500 to-red-600'
-                      : 'bg-gradient-to-r from-indigo-500 to-indigo-600'
-                  }`}
-                >
-                  <i className="fas fa-flask text-white text-lg"></i>
+              <div className="flex items-start justify-between mb-6">
+                <div className="relative">
+                  <span className="absolute -top-1 -left-1 h-14 w-14 rounded-full bg-purple-500/20 blur-2xl"></span>
+                  <div
+                    className={`relative flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${getColorVariant(index)} text-white shadow-lg`}
+                  >
+                    <i className="fas fa-flask text-lg"></i>
+                  </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-lg font-bold text-slate-800">{lab.name}</div>
-                  <div className="text-xs text-slate-500 flex items-center gap-1">
-                    <i className="fas fa-users"></i>
-                    <span>{lab.capacity} students</span>
-                  </div>
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Laboratory</p>
+                  <div className="mt-1 text-lg font-semibold text-slate-800">{lab.subject_name || lab.name}</div>
+                  <span className="mt-2 inline-flex items-center gap-2 rounded-full bg-slate-50/80 px-3 py-1 text-xs font-medium text-slate-500 shadow-sm">
+                    <i className="fas fa-users text-primary-500"></i>
+                    Capacity {lab.capacity || lab.max_students || 0}
+                  </span>
                 </div>
               </div>
 
-              <div className="mb-4">
-                <h4 className="font-semibold text-slate-800 mb-3">Laboratory Details</h4>
-                <div className="space-y-2 text-sm text-slate-600">
+              <div className="mb-5 space-y-3">
+                <h4 className="text-xl font-semibold text-slate-800">Laboratory Details</h4>
+                <p className="text-sm text-slate-500 leading-relaxed">
+                  Equip your students with hands-on exploration inside a modern, well-resourced workspace.
+                </p>
+                <div className="space-y-3 text-sm text-slate-600">
                   <div className="flex items-start gap-2">
-                    <i className="fas fa-calendar-alt text-purple-500 w-4 mt-1"></i>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-50 text-purple-500">
+                      <i className="fas fa-calendar-alt text-xs"></i>
+                    </div>
                     <div>
-                      <span className="font-medium">Schedule:</span>
+                      <p className="text-xs uppercase tracking-wide text-slate-400">Schedule</p>
                       {lab.day && lab.time_slot ? (
-                        <div className="text-slate-700">
+                        <p className="text-sm font-semibold text-slate-700">
                           {lab.day}, {lab.time_slot}
-                        </div>
+                        </p>
                       ) : (
-                        <div className="text-slate-500 italic">Not scheduled</div>
+                        <p className="text-sm font-medium text-slate-500 italic">Not scheduled</p>
                       )}
                     </div>
                   </div>
 
                   {lab.teacher_name && (
                     <div className="flex items-center gap-2">
-                      <i className="fas fa-user-tie text-indigo-500 w-4"></i>
-                      <span>
-                        <strong>Teacher:</strong> {lab.teacher_name}
-                      </span>
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-500">
+                        <i className="fas fa-user-tie text-xs"></i>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Lead Instructor</p>
+                        <p className="text-sm font-semibold text-slate-700">{lab.teacher_name}</p>
+                      </div>
                     </div>
                   )}
 
                   {lab.room && (
                     <div className="flex items-center gap-2">
-                      <i className="fas fa-door-open text-green-500 w-4"></i>
-                      <span>
-                        <strong>Room:</strong> {lab.room}
-                      </span>
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-500">
+                        <i className="fas fa-door-open text-xs"></i>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Location</p>
+                        <p className="text-sm font-semibold text-slate-700">{lab.room}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {Array.isArray(lab.resources) && lab.resources.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-50 text-amber-500">
+                        <i className="fas fa-toolbox text-xs"></i>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Resources</p>
+                        <p className="text-sm font-semibold text-slate-700">
+                          {lab.resources.slice(0, 3).join(', ')}
+                          {lab.resources.length > 3 && '…'}
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
               </div>
 
               {isAdmin && (
-                <div className="flex justify-end gap-2">
-                  <button
-                    className="p-2 text-slate-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors duration-200"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEdit(lab);
-                    }}
-                    title="Edit"
-                  >
-                    <i className="fas fa-edit"></i>
-                  </button>
-                  <button
-                    className="p-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(lab.id);
-                    }}
-                    title="Delete"
-                  >
-                    <i className="fas fa-trash"></i>
-                  </button>
+                <div className="flex items-center justify-between border-t border-white/20 pt-4">
+                  <span className="text-xs uppercase tracking-wide text-slate-400">Manage session</span>
+                  <div className="flex gap-2">
+                    <button
+                      className="inline-flex items-center gap-2 rounded-xl bg-primary-50 px-3 py-2 text-sm font-medium text-primary-600 transition-colors hover:bg-primary-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEdit(lab);
+                      }}
+                      title="Edit"
+                    >
+                      <i className="fas fa-edit"></i>
+                      Edit
+                    </button>
+                    <button
+                      className="inline-flex items-center gap-2 rounded-xl bg-rose-50 px-3 py-2 text-sm font-medium text-rose-500 transition-colors hover:bg-rose-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(lab.id);
+                      }}
+                      title="Delete"
+                    >
+                      <i className="fas fa-trash"></i>
+                      Delete
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -376,6 +430,7 @@ const Labs = () => {
                         value={formData.department_id}
                         onChange={handleInputChange}
                         className="input-field"
+                      required
                       >
                         <option value="">Select Department</option>
                         {departments.map((dept) => (
@@ -395,6 +450,7 @@ const Labs = () => {
                         value={formData.subject_id}
                         onChange={handleInputChange}
                         className="input-field"
+                      required
                       >
                         <option value="">Select Subject</option>
                         {subjects.map((subject) => (
@@ -474,22 +530,6 @@ const Labs = () => {
                           </option>
                         ))}
                       </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Duration (minutes)
-                      </label>
-                      <input
-                        type="number"
-                        name="duration"
-                        min="30"
-                        max="180"
-                        step="15"
-                        value={formData.duration}
-                        onChange={handleInputChange}
-                        className="input-field"
-                      />
                     </div>
 
                     <div>

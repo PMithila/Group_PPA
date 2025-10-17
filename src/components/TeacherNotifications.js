@@ -1,5 +1,5 @@
 // Teacher Notification Component
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { teacherNotificationService } from '../services/teacherNotificationService';
 import { useToast } from '../hooks/useToast';
@@ -15,16 +15,29 @@ const TeacherNotifications = () => {
   // Check if user is a teacher
   const isTeacher = currentUser?.role === 'teacher' || currentUser?.role === 'TEACHER';
 
+  const teacherInfo = useMemo(() => ({
+    name: currentUser?.name,
+    id: currentUser?.id,
+    email: currentUser?.email
+  }), [currentUser?.name, currentUser?.id, currentUser?.email]);
+
   const loadTodaysClasses = useCallback(async () => {
     if (!currentUser?.name) return;
     
     try {
-      const classes = await teacherNotificationService.getTodaysClasses(currentUser.name);
+      const classes = await teacherNotificationService.getTodaysClasses(teacherInfo);
       setTodaysClasses(classes);
+
+      const scheduleNotifications = await teacherNotificationService.buildScheduleNotifications(teacherInfo);
+      setNotifications(prev => {
+        const scheduleIds = new Set(scheduleNotifications.map(n => n.id));
+        const dynamicNotifications = prev.filter(n => n.type !== 'schedule' && !scheduleIds.has(n.id));
+        return [...scheduleNotifications, ...dynamicNotifications];
+      });
     } catch (error) {
       console.error('Failed to load today\'s classes:', error);
     }
-  }, [currentUser?.name]);
+  }, [currentUser?.name, teacherInfo]);
 
   // Schedule conflict feature removed per requirements
   const checkConflicts = useCallback(async () => {
@@ -36,11 +49,30 @@ const TeacherNotifications = () => {
 
     // Load today's classes
     loadTodaysClasses();
+
+    const seedNotifications = async () => {
+      const scheduleNotifications = await teacherNotificationService.buildScheduleNotifications(teacherInfo);
+      setNotifications(prev => {
+        const scheduleIds = new Set(scheduleNotifications.map(n => n.id));
+        const dynamicNotifications = prev.filter(n => n.type !== 'schedule' && !scheduleIds.has(n.id));
+        return [...scheduleNotifications, ...dynamicNotifications];
+      });
+    };
+    seedNotifications();
     
     // Conflicts disabled
 
     // Subscribe to notifications
     const unsubscribe = teacherNotificationService.subscribe((notification) => {
+      if (notification?.type === 'schedule_snapshot' && Array.isArray(notification.notifications)) {
+        setNotifications((prev) => {
+          const scheduleOnly = notification.notifications.map((n) => ({ ...n }));
+          const others = prev.filter((item) => item.type !== 'schedule');
+          return [...scheduleOnly, ...others];
+        });
+        return;
+      }
+
       setNotifications(prev => [notification, ...prev]);
       
       // Show toast notification
@@ -60,12 +92,12 @@ const TeacherNotifications = () => {
       unsubscribe();
       teacherNotificationService.stopMonitoring();
     };
-  }, [isTeacher, currentUser?.name, loadTodaysClasses, checkConflicts, warning, info]);
+  }, [isTeacher, currentUser?.name, loadTodaysClasses, checkConflicts, warning, info, teacherInfo]);
 
   const startMonitoring = () => {
     if (!currentUser?.name) return;
     
-    teacherNotificationService.startMonitoring(currentUser.name, 5, 15);
+    teacherNotificationService.startMonitoring(teacherInfo, 5, 15);
     setIsMonitoring(true);
     success('Class monitoring started! You\'ll be notified 15 minutes before each class.');
   };

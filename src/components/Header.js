@@ -1,8 +1,18 @@
 // src/components/Header.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import { getClasses, getLabSessions } from '../api';
+import { teacherNotificationService } from '../services/teacherNotificationService';
+
+const notificationsEqual = (a = [], b = []) => {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i]?.id !== b[i]?.id) {
+      return false;
+    }
+  }
+  return true;
+};
 
 const Header = ({ user, viewMode, onViewModeChange, notifications = [], onNotificationDismiss }) => {
   const navigate = useNavigate();
@@ -13,6 +23,9 @@ const Header = ({ user, viewMode, onViewModeChange, notifications = [], onNotifi
   const [loadingSchedule, setLoadingSchedule] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [notificationCount, setNotificationCount] = useState(notifications?.length || 0);
+  const [activeNotifications, setActiveNotifications] = useState(notifications || []);
+  const lastNotificationsRef = useRef(notifications || []);
 
   // Check if user is a teacher
   const isTeacher = user?.role === 'teacher' || user?.role === 'TEACHER';
@@ -107,7 +120,22 @@ const Header = ({ user, viewMode, onViewModeChange, notifications = [], onNotifi
       'import': '/import',
       'upload': '/import',
       'data': '/import',
-      'excel': '/import'
+      'excel': '/import',
+
+      // Leave management
+      'leave': '/leave-requests',
+      'leaves': '/leave-requests',
+      'leave request': '/leave-requests',
+      'leave requests': '/leave-requests',
+      'absence': '/leave-requests',
+
+      // Schedule change requests
+      'schedule change': '/schedule-change-requests',
+      'schedule changes': '/schedule-change-requests',
+      'change request': '/schedule-change-requests',
+      'change requests': '/schedule-change-requests',
+      'swap class': '/schedule-change-requests',
+      'swap lab': '/schedule-change-requests'
     };
 
     // Convert search query to lowercase for case-insensitive matching
@@ -144,40 +172,118 @@ const Header = ({ user, viewMode, onViewModeChange, notifications = [], onNotifi
     setSearchQuery('');
   };
 
+  const teacherInfo = useMemo(() => ({
+    name: user?.name,
+    id: user?.id,
+    email: user?.email
+  }), [user?.name, user?.id, user?.email]);
+
+  const mergeScheduleNotificationsFn = useCallback((scheduleNotifications) => {
+    setActiveNotifications((prev) => {
+      const scheduleIds = new Set(scheduleNotifications.map((notification) => notification.id));
+      const dynamicNotifications = prev.filter(
+        (notification) => notification.type !== 'schedule' || !scheduleIds.has(notification.id)
+      );
+      const combined = [...scheduleNotifications, ...dynamicNotifications];
+      if (!notificationsEqual(lastNotificationsRef.current, combined)) {
+        lastNotificationsRef.current = combined;
+      }
+      setNotificationCount(combined.length);
+      return combined;
+    });
+  }, []);
+
+  const refreshScheduleNotifications = useCallback(async () => {
+    try {
+      const scheduleNotifications = await teacherNotificationService.buildScheduleNotifications(teacherInfo);
+      mergeScheduleNotificationsFn(scheduleNotifications);
+    } catch (refreshError) {
+      console.error('Failed to refresh schedule notifications:', refreshError);
+    }
+  }, [teacherInfo, mergeScheduleNotificationsFn]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const seedTeacherNotifications = async () => {
+      setLoadingSchedule(true);
+      try {
+        const todaysSessions = await teacherNotificationService.getTodaysClasses(teacherInfo);
+        if (!isMounted) return;
+        setTodaysSchedule(todaysSessions);
+
+        const scheduleNotifications = await teacherNotificationService.buildScheduleNotifications(teacherInfo);
+        if (!isMounted) return;
+        mergeScheduleNotificationsFn(scheduleNotifications);
+      } catch (error) {
+        if (!isMounted) return;
+        console.error('Error seeding notifications:', error);
+        setActiveNotifications([]);
+        setNotificationCount(0);
+        setTodaysSchedule([]);
+      } finally {
+        if (isMounted) {
+          setLoadingSchedule(false);
+        }
+      }
+    };
+
+    if (!isTeacher) {
+      const normalized = notifications || [];
+      const prev = lastNotificationsRef.current || [];
+      if (!notificationsEqual(normalized, prev)) {
+        setActiveNotifications(normalized);
+        lastNotificationsRef.current = normalized;
+      }
+      setNotificationCount(normalized.length || 0);
+      setTodaysSchedule([]);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    seedTeacherNotifications();
+    teacherNotificationService.startMonitoring(teacherInfo, 5, 15);
+
+    const interval = setInterval(() => {
+      refreshScheduleNotifications();
+    }, 60 * 1000);
+
+    const unsubscribe = teacherNotificationService.subscribe((notification) => {
+      if (notification?.type === 'schedule_snapshot' && Array.isArray(notification.notifications)) {
+        mergeScheduleNotificationsFn(notification.notifications);
+        return;
+      }
+
+      setActiveNotifications((prev) => {
+        const updated = [notification, ...prev.filter((item) => item.id !== notification.id)];
+        setNotificationCount(updated.length);
+        lastNotificationsRef.current = updated;
+        return updated;
+      });
+    });
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      unsubscribe();
+      teacherNotificationService.stopMonitoring();
+    };
+  }, [isTeacher, teacherInfo, notifications, mergeScheduleNotificationsFn, refreshScheduleNotifications]);
+
   const handleNotificationClick = async () => {
     if (!isTeacher) return;
 
-    setShowScheduleDropdown(!showScheduleDropdown);
+    const nextVisibleState = !showScheduleDropdown;
+    setShowScheduleDropdown(nextVisibleState);
 
-    if (!showScheduleDropdown) {
+    if (nextVisibleState) {
       setLoadingSchedule(true);
       try {
-        // Fetch today's schedule for the teacher
-        const [classes, labs] = await Promise.all([
-          getClasses(),
-          getLabSessions()
-        ]);
-
-        // Filter for today's classes and labs for this teacher
-        const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-        const teacherClasses = classes.filter(cls =>
-          cls.teacher === user.name && cls.day === today
-        ).map(cls => ({ ...cls, type: 'class' }));
-
-        const teacherLabs = labs.filter(lab =>
-          lab.teacher === user.name && lab.day === today
-        ).map(lab => ({ ...lab, type: 'lab' }));
-
-        const combinedSchedule = [...teacherClasses, ...teacherLabs].sort((a, b) => {
-          // Sort by time slot
-          const timeA = a.time_slot || '';
-          const timeB = b.time_slot || '';
-          return timeA.localeCompare(timeB);
-        });
-
-        setTodaysSchedule(combinedSchedule);
+        const todaysSessions = await teacherNotificationService.getTodaysClasses(teacherInfo);
+        setTodaysSchedule(todaysSessions);
       } catch (error) {
-        console.error('Error fetching today\'s schedule:', error);
+        console.error('Error refreshing schedule:', error);
         setTodaysSchedule([]);
       } finally {
         setLoadingSchedule(false);
@@ -274,9 +380,9 @@ const Header = ({ user, viewMode, onViewModeChange, notifications = [], onNotifi
                     title="Today's Schedule"
                   >
                     <i className="fas fa-bell text-lg"></i>
-                    {todaysSchedule.length > 0 && (
+                    {notificationCount > 0 && (
                       <span className="absolute -top-1 -right-1 bg-primary-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                        {todaysSchedule.length}
+                        {notificationCount}
                       </span>
                     )}
                   </button>

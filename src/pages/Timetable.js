@@ -57,7 +57,6 @@ const Timetable = ({ timetableData, onTimetableUpdate, user }) => {
             room: cls.room,
             subject_name: cls.subject_name,
             department_name: cls.department_name,
-            duration: cls.duration,
             max_students: cls.max_students,
             type: 'class'
           };
@@ -69,13 +68,12 @@ const Timetable = ({ timetableData, onTimetableUpdate, user }) => {
         if (lab.time_slot === timeSlot && lab.day && days.hasOwnProperty(lab.day) && !days[lab.day]) {
           days[lab.day] = {
             id: lab.id,
-            code: lab.name, // Using name as code for labs
-            name: lab.name,
+            code: lab.subject_name || lab.name, // Use subject name as code for labs
+            name: lab.subject_name || lab.name, // Use subject name as name for labs
             teacher: lab.teacher_name || lab.teacher,
             room: lab.room,
             subject_name: lab.subject_name || 'Lab Session',
             department_name: lab.department_name,
-            duration: lab.duration,
             max_students: lab.max_students,
             capacity: lab.capacity,
             resources: lab.resources,

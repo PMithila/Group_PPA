@@ -27,6 +27,20 @@ export class Subject {
     return result.rows;
   }
 
+  static async findByName(name) {
+    if (!name) return null;
+    const query = `
+      SELECT s.*, d.name as department_name 
+      FROM subjects s 
+      LEFT JOIN departments d ON s.department_id = d.id 
+      WHERE LOWER(s.name) = LOWER($1)
+      ORDER BY s.id
+      LIMIT 1
+    `;
+    const result = await pool.query(query, [name.trim()]);
+    return result.rows[0] || null;
+  }
+
   static async getById(id) {
     const query = `
       SELECT s.*, d.name as department_name 
@@ -51,25 +65,27 @@ export class Subject {
   }
 
   static async create(subjectData) {
-    const { code, name, description, credits, department_id } = subjectData;
+    const { code, name, description, department_id } = subjectData;
     const query = `
-      INSERT INTO subjects (code, name, description, credits, department_id)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO subjects (code, name, description, department_id)
+      VALUES ($1, $2, $3, $4)
       RETURNING *
     `;
-    const result = await pool.query(query, [code, name, description, credits, department_id]);
+    const values = [code, name, description, department_id ?? null];
+    const result = await pool.query(query, values);
     return result.rows[0];
   }
 
   static async update(id, subjectData) {
-    const { code, name, description, credits, department_id } = subjectData;
+    const { code, name, description, department_id } = subjectData;
     const query = `
       UPDATE subjects
-      SET code = $1, name = $2, description = $3, credits = $4, department_id = $5
-      WHERE id = $6
+      SET code = $1, name = $2, description = $3, department_id = $4
+      WHERE id = $5
       RETURNING *
     `;
-    const result = await pool.query(query, [code, name, description, credits, department_id, id]);
+    const values = [code, name, description, department_id ?? null, id];
+    const result = await pool.query(query, values);
     return result.rows[0];
   }
 

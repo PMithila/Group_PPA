@@ -1,14 +1,34 @@
 // src/pages/Classes.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Header from '../components/Header';
+import { ToastContainer } from '../components/Toast';
+import { useToast } from '../hooks/useToast';
 import { useAuth } from '../context/AuthContext';
 import { getClasses, createClass, updateClass, deleteClass, getTeachers, getSubjects, getDepartments } from '../api';
+import { teacherNotificationService } from '../services/teacherNotificationService';
+
+const HONORIFICS = ['mr', 'ms', 'mrs', 'miss', 'dr', 'prof', 'sir', 'madam'];
+
+const stripHonorifics = (name = '') => {
+  if (!name) return '';
+  const parts = name
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!parts.length) return '';
+  const first = parts[0].replace(/\./g, '').toLowerCase();
+  if (HONORIFICS.includes(first)) {
+    return parts.slice(1).join(' ');
+  }
+  return parts.join(' ');
+};
 
 const Classes = () => {
   const { currentUser } = useAuth();
+  const { toasts, success, error, removeToast } = useToast();
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingClass, setEditingClass] = useState(null);
   const [formData, setFormData] = useState({
@@ -16,11 +36,11 @@ const Classes = () => {
     name: '',
     subject_id: '',
     department_id: '',
-    teacher: '',
+    teacher_id: '',
+    teacher_name: '',
     room: '',
     day: '',
     time_slot: '',
-    duration: 60,
     max_students: 30
   });
   const fixedTimeSlots = [
@@ -37,6 +57,14 @@ const Classes = () => {
   const [subjects, setSubjects] = useState([]);
   const [departments, setDepartments] = useState([]);
 
+  const sortedTeachers = useMemo(() => {
+    return [...teachers].sort((a, b) => {
+      const nameA = a.name || a.email || '';
+      const nameB = b.name || b.email || '';
+      return nameA.localeCompare(nameB);
+    });
+  }, [teachers]);
+
   // Check if user is admin
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'ADMIN';
 
@@ -46,14 +74,14 @@ const Classes = () => {
   const fetchClasses = async () => {
     try {
       setLoading(true);
-      setError(null);
+      setErrorMessage(null);
       console.log('Fetching classes...');
       const fetchedClasses = await getClasses();
       console.log('Classes fetched successfully:', fetchedClasses.length);
       setClasses(fetchedClasses);
     } catch (err) {
       console.error('Error fetching classes:', err);
-      setError('Failed to fetch classes. Please check your connection and try again.');
+      setErrorMessage('Failed to fetch classes. Please check your connection and try again.');
       setClasses([]); // Set empty array instead of leaving undefined
     } finally {
       setLoading(false);
@@ -106,30 +134,45 @@ const Classes = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      setError(null);
+      setErrorMessage(null);
       // Normalize and validate payload to match backend expectations
+      const selectedTeacher = teachers.find((t) => String(t.id) === formData.teacher_id);
+
       const payload = {
         code: (formData.code || '').trim(),
         name: (formData.name || '').trim(),
         subject_id: formData.subject_id && formData.subject_id !== '' ? Number(formData.subject_id) : null,
         department_id: formData.department_id && formData.department_id !== '' ? Number(formData.department_id) : null,
-        teacher: formData.teacher || null,
+        teacher: selectedTeacher?.name || selectedTeacher?.email || formData.teacher_name || null,
+        teacher_id: formData.teacher_id ? Number(formData.teacher_id) : null,
+        teacher_email: selectedTeacher?.email || null,
         room: formData.room || null,
         day: formData.day || null,
         time_slot: formData.time_slot || null,
-        duration: formData.duration ? Number(formData.duration) : 60,
         max_students: formData.max_students ? Number(formData.max_students) : 30,
       };
 
+      if (formData.teacher_name && !payload.teacher_id && !selectedTeacher) {
+        setErrorMessage('Please select a teacher from the list to assign this class.');
+        error('Please select a teacher from the list to assign this class.');
+        return;
+      }
+
       if (!payload.code || !payload.name || !payload.subject_id || payload.subject_id === 0) {
-        setError('Please select a subject (auto-fills code and name).');
+        setErrorMessage('Please select a subject (auto-fills code and name).');
+        return;
+      }
+
+      if (!payload.teacher_id) {
+        setErrorMessage('Please select a teacher for this class.');
+        error('Please select a teacher for this class.');
         return;
       }
 
       // Validate that subject_id exists in subjects array
       const selectedSubject = subjects.find(s => s.id === payload.subject_id);
       if (!selectedSubject) {
-        setError('Selected subject is no longer available. Please refresh the page and try again.');
+        setErrorMessage('Selected subject is no longer available. Please refresh the page and try again.');
         return;
       }
 
@@ -137,7 +180,7 @@ const Classes = () => {
       if (payload.department_id) {
         const selectedDepartment = departments.find(d => d.id === payload.department_id);
         if (!selectedDepartment) {
-          setError('Selected department is no longer available. Please refresh the page and try again.');
+          setErrorMessage('Selected department is no longer available. Please refresh the page and try again.');
           return;
         }
       }
@@ -147,31 +190,58 @@ const Classes = () => {
       if (editingClass) {
         await updateClass(editingClass.id, payload);
         console.log('Class updated successfully');
+        success('Class updated successfully');
       } else {
         await createClass(payload);
         console.log('Class created successfully');
+        success('Class created successfully');
       }
+
+      if (payload.teacher_id) {
+        await teacherNotificationService.emitScheduleSnapshot({
+          id: payload.teacher_id,
+          name: payload.teacher,
+          email: selectedTeacher?.email
+        });
+      }
+
       await fetchClasses();
       resetForm();
     } catch (err) {
       console.error('Create/Update class failed:', err);
       const serverMsg = err?.response?.data?.error || err?.message || 'Failed to save class.';
-      setError(serverMsg);
+      setErrorMessage(serverMsg);
+      error(serverMsg || 'Failed to save class.');
     }
   };
 
   const handleEdit = (cls) => {
     setEditingClass(cls);
+    let teacherId = cls.teacher_id ? String(cls.teacher_id) : '';
+
+    if (!teacherId && cls.teacher) {
+      const normalized = stripHonorifics(cls.teacher).trim().toLowerCase();
+      const matchedTeacher = teachers.find((teacher) => {
+        const teacherName = teacher.name ? stripHonorifics(teacher.name).trim().toLowerCase() : '';
+        return teacherName && teacherName === normalized;
+      });
+      if (matchedTeacher) {
+        teacherId = String(matchedTeacher.id);
+      }
+    }
+
+    const selectedTeacher = teachers.find((teacher) => String(teacher.id) === teacherId);
+
     setFormData({
       code: cls.code || '',
       name: cls.name || '',
       subject_id: cls.subject_id || '',
       department_id: cls.department_id || '',
-      teacher: cls.teacher || '',
+      teacher_id: teacherId,
+      teacher_name: selectedTeacher?.name || cls.teacher || '',
       room: cls.room || '',
       day: cls.day || '',
       time_slot: cls.time_slot || '',
-      duration: cls.duration || 60,
       max_students: cls.max_students || 30
     });
     setShowForm(true);
@@ -180,14 +250,16 @@ const Classes = () => {
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this class?')) {
       try {
-        setError(null);
+        setErrorMessage(null);
         console.log('Deleting class with ID:', id);
         await deleteClass(id);
         console.log('Class deleted successfully');
+        error('Class deleted successfully');
         await fetchClasses();
       } catch (err) {
         console.error('Delete class failed:', err);
-        setError('Failed to delete class.');
+        setErrorMessage('Failed to delete class.');
+        error('Failed to delete class.');
       }
     }
   };
@@ -213,17 +285,35 @@ const Classes = () => {
     }
   };
 
+  const handleTeacherChange = (teacherId) => {
+    if (!teacherId) {
+      setFormData((prev) => ({
+        ...prev,
+        teacher_id: '',
+        teacher_name: ''
+      }));
+      return;
+    }
+
+    const selectedTeacher = teachers.find((teacher) => String(teacher.id) === teacherId);
+    setFormData((prev) => ({
+      ...prev,
+      teacher_id: teacherId,
+      teacher_name: selectedTeacher?.name || selectedTeacher?.email || ''
+    }));
+  };
+
   const resetForm = () => {
     setFormData({
       code: '',
       name: '',
       subject_id: '',
       department_id: '',
-      teacher: '',
+      teacher_id: '',
+      teacher_name: '',
       room: '',
       day: '',
       time_slot: '',
-      duration: 60,
       max_students: 30
     });
     setEditingClass(null);
@@ -231,7 +321,12 @@ const Classes = () => {
   };
 
   const getColorVariant = (index) => {
-    const variants = ['blue', 'green', 'orange', 'purple'];
+    const variants = [
+      'from-sky-400 via-sky-500 to-blue-600',
+      'from-emerald-400 via-emerald-500 to-teal-600',
+      'from-amber-400 via-orange-500 to-rose-500',
+      'from-purple-400 via-fuchsia-500 to-indigo-600'
+    ];
     return variants[index % variants.length];
   };
 
@@ -248,6 +343,7 @@ const Classes = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
       <Header user={currentUser} />
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -256,7 +352,7 @@ const Classes = () => {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-primary-600 to-primary-700 bg-clip-text text-transparent mb-2">
-                Classes & Subjects
+                Subjects
               </h1>
               <p className="text-slate-600 flex items-center gap-2">
                 {isAdmin ? (
@@ -285,11 +381,11 @@ const Classes = () => {
         </div>
 
         {/* Error Message */}
-        {error && (
+        {errorMessage && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
             <div className="flex items-center gap-2">
               <i className="fas fa-exclamation-triangle text-red-500"></i>
-              <p className="text-red-700">{error}</p>
+              <p className="text-red-700">{errorMessage}</p>
             </div>
           </div>
         )}
@@ -317,70 +413,99 @@ const Classes = () => {
           {classes.map((cls, index) => (
             <div 
               key={cls.id} 
-              className={`group relative bg-white/60 backdrop-blur-sm rounded-2xl border border-white/20 p-6 hover:bg-white/80 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ${
-                isAdmin ? 'cursor-pointer' : 'cursor-default'
-              }`}
+              className={`glass-card group ${isAdmin ? 'glass-card--interactive' : ''}`}
               onClick={() => isAdmin && handleEdit(cls)}
             >
               {/* Header */}
-              <div className="flex items-start justify-between mb-4">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
-                  getColorVariant(index) === 'blue' ? 'bg-gradient-to-r from-blue-500 to-blue-600' :
-                  getColorVariant(index) === 'green' ? 'bg-gradient-to-r from-green-500 to-green-600' :
-                  getColorVariant(index) === 'orange' ? 'bg-gradient-to-r from-orange-500 to-orange-600' :
-                  getColorVariant(index) === 'purple' ? 'bg-gradient-to-r from-purple-500 to-purple-600' :
-                  'bg-gradient-to-r from-slate-500 to-slate-600'
-                }`}>
-                  <i className="fas fa-book text-white text-lg"></i>
+              <div className="flex items-start justify-between mb-6">
+                <div className="relative">
+                  <span className="absolute -top-1 -left-1 h-14 w-14 rounded-full bg-primary-500/25 blur-2xl"></span>
+                  <div className={`relative flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${getColorVariant(index)} text-white shadow-lg`}>
+                    <i className="fas fa-book text-lg"></i>
+                  </div>
                 </div>
                 
                 <div className="text-right">
-                  <div className="text-lg font-bold text-slate-800">{cls.code}</div>
-                  <div className="text-xs text-slate-500 flex items-center gap-1">
-                    <i className="fas fa-clock"></i>
-                    <span>{cls.duration || 60}min</span>
-                  </div>
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Course code</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-800">{cls.code}</p>
+                  <span className="mt-2 inline-flex items-center gap-2 rounded-full bg-slate-50/80 px-3 py-1 text-xs font-medium text-slate-500 shadow-sm">
+                    <i className="fas fa-users text-primary-500"></i>
+                    {cls.max_students || 30} students
+                  </span>
                 </div>
               </div>
               
               {/* Body */}
-              <div className="mb-4">
-                <h4 className="font-semibold text-slate-800 mb-3">{cls.name}</h4>
-                <div className="space-y-2 text-sm text-slate-600">
+              <div className="mb-5 space-y-3">
+                <h4 className="text-xl font-semibold text-slate-800">{cls.name}</h4>
+                <p className="text-sm text-slate-500 leading-relaxed">
+                  {cls.description || 'A curated learning experience tailored to your academic pathway.'}
+                </p>
+                <div className="space-y-3 text-sm text-slate-600">
                   {cls.subject_name && (
                     <div className="flex items-center gap-2">
-                      <i className="fas fa-book-open text-primary-500 w-4"></i>
-                      <span><strong>Subject:</strong> {cls.subject_name}</span>
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
+                        <i className="fas fa-book-open text-xs"></i>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Subject</p>
+                        <p className="text-sm font-semibold text-slate-700">{cls.subject_name}</p>
+                      </div>
                     </div>
                   )}
                   {cls.department_name && (
                     <div className="flex items-center gap-2">
-                      <i className="fas fa-building text-blue-500 w-4"></i>
-                      <span><strong>Department:</strong> {cls.department_name}</span>
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-50 text-sky-500">
+                        <i className="fas fa-building text-xs"></i>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Department</p>
+                        <p className="text-sm font-semibold text-slate-700">{cls.department_name}</p>
+                      </div>
                     </div>
                   )}
-                  {cls.teacher && (
+                  {(cls.teacher_full_name || cls.teacher) && (
                     <div className="flex items-center gap-2">
-                      <i className="fas fa-chalkboard-teacher text-green-500 w-4"></i>
-                      <span><strong>Teacher:</strong> {cls.teacher}</span>
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-500">
+                        <i className="fas fa-chalkboard-teacher text-xs"></i>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Instructor</p>
+                        <p className="text-sm font-semibold text-slate-700">{cls.teacher_full_name || cls.teacher}</p>
+                      </div>
                     </div>
                   )}
                   {cls.room && (
                     <div className="flex items-center gap-2">
-                      <i className="fas fa-door-open text-orange-500 w-4"></i>
-                      <span><strong>Room:</strong> {cls.room}</span>
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-50 text-amber-500">
+                        <i className="fas fa-door-open text-xs"></i>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Location</p>
+                        <p className="text-sm font-semibold text-slate-700">{cls.room}</p>
+                      </div>
                     </div>
                   )}
                   {cls.day && (
                     <div className="flex items-center gap-2">
-                      <i className="fas fa-calendar-day text-purple-500 w-4"></i>
-                      <span><strong>Day:</strong> {cls.day}</span>
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-500">
+                        <i className="fas fa-calendar-day text-xs"></i>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Day</p>
+                        <p className="text-sm font-semibold text-slate-700">{cls.day}</p>
+                      </div>
                     </div>
                   )}
                   {cls.time_slot && (
                     <div className="flex items-center gap-2">
-                      <i className="fas fa-clock text-red-500 w-4"></i>
-                      <span><strong>Time:</strong> {cls.time_slot}</span>
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-50 text-purple-500">
+                        <i className="fas fa-clock text-xs"></i>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Time</p>
+                        <p className="text-sm font-semibold text-slate-700">{cls.time_slot}</p>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -388,27 +513,33 @@ const Classes = () => {
 
               {/* Footer */}
               {isAdmin && (
-                <div className="flex justify-end gap-2">
-                  <button 
-                    className="p-2 text-slate-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors duration-200"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEdit(cls);
-                    }}
-                    title="Edit"
-                  >
-                    <i className="fas fa-edit"></i>
-                  </button>
-                  <button 
-                    className="p-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(cls.id);
-                    }}
-                    title="Delete"
-                  >
-                    <i className="fas fa-trash"></i>
-                  </button>
+                <div className="flex items-center justify-between border-t border-white/20 pt-4">
+                  <span className="text-xs uppercase tracking-wide text-slate-400">Manage class</span>
+                  <div className="flex gap-2">
+                    <button
+                      className="inline-flex items-center gap-2 rounded-xl bg-primary-50 px-3 py-2 text-sm font-medium text-primary-600 transition-colors hover:bg-primary-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEdit(cls);
+                      }}
+                      title="Edit"
+                      required
+                    >
+                      <i className="fas fa-edit"></i>
+                      Edit
+                    </button>
+                    <button
+                      className="inline-flex items-center gap-2 rounded-xl bg-rose-50 px-3 py-2 text-sm font-medium text-rose-500 transition-colors hover:bg-rose-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(cls.id);
+                      }}
+                      title="Delete"
+                    >
+                      <i className="fas fa-trash"></i>
+                      Delete
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -533,21 +664,31 @@ const Classes = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Teacher *
+                      Teacher
                     </label>
                     <select
-                      value={formData.teacher}
-                      onChange={(e) => setFormData({...formData, teacher: e.target.value})}
+                      value={formData.teacher_id}
+                      onChange={(e) => handleTeacherChange(e.target.value)}
                       className="input-field"
-                      required
+                      disabled={!teachers.length}
                     >
                       <option value="">Select Teacher</option>
-                      {teachers.map(teacher => (
-                        <option key={teacher.id} value={teacher.name}>
-                          {teacher.name} - {teacher.department || 'No Department'}
+                      {sortedTeachers.map((teacher) => (
+                        <option key={teacher.id} value={teacher.id}>
+                          {teacher.name || teacher.email || `Teacher #${teacher.id}`}
                         </option>
                       ))}
                     </select>
+                    {!teachers.length && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        No teachers available. Please add teachers before assigning classes.
+                      </p>
+                    )}
+                    {formData.teacher_name && !formData.teacher_id && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        Previously assigned to "{formData.teacher_name}". Please select the matching teacher from the list.
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -596,20 +737,6 @@ const Classes = () => {
                         <option key={ts} value={ts}>{ts}</option>
                       ))}
                     </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Duration (minutes)
-                    </label>
-                    <input
-                      type="number"
-                      min="30"
-                      max="180"
-                      value={formData.duration}
-                      onChange={(e) => setFormData({...formData, duration: parseInt(e.target.value)})}
-                      className="input-field"
-                    />
                   </div>
 
                   <div>

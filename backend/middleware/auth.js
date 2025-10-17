@@ -1,33 +1,37 @@
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User.js';
 
+const shouldLogAuthDebug = () => process.env.LOG_AUTH_DEBUG === 'true';
+
+const debug = (...args) => {
+  if (shouldLogAuthDebug()) {
+    console.log(...args);
+  }
+};
+
 export const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
-  console.log('Auth header received:', authHeader ? 'Bearer token present' : 'No auth header');
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
-    console.log('No token provided in request');
+    debug('Auth middleware: missing bearer token');
     return res.status(401).json({ error: 'Access token required' });
   }
 
-  console.log('Token received, length:', token.length);
-
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    console.log('Token decoded successfully for user:', decoded.userId);
     const user = await User.findById(decoded.userId);
-    
+
     if (!user) {
-      console.log('User not found for ID:', decoded.userId);
+      debug('Auth middleware: user not found for id', decoded.userId);
       return res.status(401).json({ error: 'User not found' });
     }
 
-    console.log('User authenticated:', user.email);
+    debug('Auth middleware: user authenticated', user.email);
     req.user = user;
     next();
   } catch (error) {
-    console.log('Token verification failed:', error.message);
+    debug('Auth middleware: token verification failed', error.message);
     return res.status(403).json({ error: 'Invalid or expired token' });
   }
 };
@@ -44,10 +48,10 @@ export const optionalAuth = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.userId);
     req.user = user;
-    next();
   } catch (error) {
-    next();
+    debug('Optional auth: token ignored', error.message);
   }
+  next();
 };
 
 export const requireAdmin = async (req, res, next) => {

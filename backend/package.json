@@ -17,8 +17,11 @@
     "express-validator": "^7.0.1",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.4",
+    "nodemailer": "^7.0.9",
+    "openai": "^6.3.0",
     "pg": "^8.11.3",
-    "sqlite3": "^5.1.7"
+    "sqlite3": "^5.1.7",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

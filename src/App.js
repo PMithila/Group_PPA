@@ -12,6 +12,9 @@ import ImportData from './pages/ImportData';
 import Timetable from './pages/Timetable';
 import Subjects from './pages/Subjects';
 import Departments from './pages/Departments';
+import LeaveRequests from './pages/LeaveRequests';
+import ClassAutomation from './pages/ClassAutomation';
+import ScheduleChangeRequests from './pages/ScheduleChangeRequests';
 // Removed old CSS import - using Tailwind CSS now
 
 const ProtectedRoute = ({ children }) => {
@@ -145,6 +148,30 @@ function App() {
                 <ProtectedRoute>
                   <Departments />
                 </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/leave-requests" 
+              element={
+                <ProtectedRoute>
+                  <LeaveRequests />
+                </ProtectedRoute>
+              } 
+            />
+            <Route
+              path="/schedule-change-requests"
+              element={
+                <ProtectedRoute>
+                  <ScheduleChangeRequests />
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/class-automation" 
+              element={
+                <AdminRoute>
+                  <ClassAutomation />
+                </AdminRoute>
               } 
             />
             <Route 

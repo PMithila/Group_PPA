@@ -37,7 +37,8 @@ const GenerateScheduleModal = ({ onClose, onScheduleGenerated, classes }) => {
           
           if (index === steps.length - 1) {
             setTimeout(() => {
-              onScheduleGenerated(generateOptimalSchedule(classes));
+              const safeClasses = Array.isArray(classes) ? classes : [];
+              onScheduleGenerated(generateOptimalSchedule(safeClasses));
             }, 1000);
           }
         }, (index + 1) * 800);
@@ -48,7 +49,8 @@ const GenerateScheduleModal = ({ onClose, onScheduleGenerated, classes }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onScheduleGenerated, classes]);
 
-  const generateOptimalSchedule = (classes) => {
+  const generateOptimalSchedule = (classes = []) => {
+    const normalizedClasses = Array.isArray(classes) ? classes : [];
     const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
     const timeSlots = [
       '8:00-9:00', '9:00-10:00', '10:00-11:00', 
@@ -56,8 +58,8 @@ const GenerateScheduleModal = ({ onClose, onScheduleGenerated, classes }) => {
     ];
     
     // Use the classes from the database
-    const subjects = classes.map(c => ({ code: c.code, teacher: c.teacher, room: c.room }));
-    const rooms = [...new Set(classes.map(c => c.room).filter(Boolean))];
+    const subjects = normalizedClasses.map(c => ({ code: c.code, teacher: c.teacher, room: c.room }));
+    const rooms = [...new Set(normalizedClasses.map(c => c?.room).filter(Boolean))];
     const classTypes = ['lecture', 'lab', 'tutorial']; // You can customize this
 
     let schedule = timeSlots.map(time => ({
@@ -73,9 +75,10 @@ const GenerateScheduleModal = ({ onClose, onScheduleGenerated, classes }) => {
         const randomSlotIndex = Math.floor(Math.random() * timeSlots.length);
 
         if (!schedule[randomSlotIndex].days[randomDay]) {
+          const fallbackRoom = rooms.length > 0 ? rooms[Math.floor(Math.random() * rooms.length)] : 'TBD';
           schedule[randomSlotIndex].days[randomDay] = {
             type: classTypes[Math.floor(Math.random() * classTypes.length)],
-            content: `${subject.code} (${subject.room || rooms[Math.floor(Math.random() * rooms.length)] || 'TBD'})`,
+            content: `${subject.code || 'Session'} (${subject.room || fallbackRoom || 'TBD'})`,
             teacher: subject.teacher || 'Unassigned',
           };
           placed = true;

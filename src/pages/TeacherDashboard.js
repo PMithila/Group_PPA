@@ -1,5 +1,5 @@
 // Teacher Dashboard Component
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import TeacherNotifications from '../components/TeacherNotifications';
@@ -8,6 +8,22 @@ import { ToastContainer } from '../components/Toast';
 import { useToast } from '../hooks/useToast';
 import { useAuth } from '../context/AuthContext';
 import { getClasses, getLabSessions } from '../api';
+
+const HONORIFICS = ['mr', 'ms', 'mrs', 'miss', 'dr', 'prof', 'sir', 'madam'];
+
+const stripHonorifics = (value = '') => {
+  if (!value) return '';
+  const parts = value
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!parts.length) return '';
+  const first = parts[0].replace(/\./g, '').toLowerCase();
+  if (HONORIFICS.includes(first)) {
+    return parts.slice(1).join(' ');
+  }
+  return parts.join(' ');
+};
 
 const TeacherDashboard = () => {
   const navigate = useNavigate();
@@ -24,8 +40,60 @@ const TeacherDashboard = () => {
     weeklyHours: 0
   });
 
+  const normalizeValue = useCallback((value) => {
+    if (!value) return '';
+    return value.toString().trim().toLowerCase();
+  }, []);
+
+  const teacherIdentity = useMemo(() => {
+    return {
+      id: currentUser?.id != null ? Number(currentUser.id) : null,
+      name: normalizeValue(currentUser?.name),
+      email: normalizeValue(currentUser?.email)
+    };
+  }, [currentUser?.id, currentUser?.name, currentUser?.email, normalizeValue]);
+
+  const matchesTeacher = useCallback((session) => {
+    if (!session) return false;
+
+    const { id: teacherId, name: teacherName, email: teacherEmail } = teacherIdentity;
+
+    if (teacherId != null) {
+      const sessionTeacherIdRaw = session.teacher_id ?? session.teacher;
+      const sessionTeacherId = sessionTeacherIdRaw != null ? Number(sessionTeacherIdRaw) : null;
+      if (sessionTeacherId != null && !Number.isNaN(sessionTeacherId) && sessionTeacherId === teacherId) {
+        return true;
+      }
+    }
+
+    const sessionTeacherEmail = normalizeValue(session.teacher_email || session.email);
+    if (teacherEmail && sessionTeacherEmail && teacherEmail === sessionTeacherEmail) {
+      return true;
+    }
+
+    const candidateNames = [
+      session.teacher_name,
+      stripHonorifics(session.teacher_name),
+      session.teacher_full_name,
+      stripHonorifics(session.teacher_full_name),
+      session.teacher,
+      stripHonorifics(session.teacher)
+    ].map(normalizeValue).filter(Boolean);
+
+    if (teacherName && candidateNames.includes(teacherName)) {
+      return true;
+    }
+
+    const strippedTeacherName = normalizeValue(stripHonorifics(currentUser?.name));
+    if (strippedTeacherName && candidateNames.includes(strippedTeacherName)) {
+      return true;
+    }
+
+    return false;
+  }, [teacherIdentity, currentUser?.name, normalizeValue]);
+
   const loadTeacherData = useCallback(async () => {
-    if (!currentUser?.name) return;
+    if (!teacherIdentity.id && !teacherIdentity.name && !teacherIdentity.email) return;
 
     setLoading(true);
     try {
@@ -36,14 +104,18 @@ const TeacherDashboard = () => {
       ]);
 
       // Filter classes for this teacher
-      const teacherClasses = classes.filter(cls =>
-        cls.teacher === currentUser.name
-      ).map(cls => ({ ...cls, type: 'class' }));
+      const teacherClasses = Array.isArray(classes)
+        ? classes
+            .filter(matchesTeacher)
+            .map(cls => ({ ...cls, type: 'class' }))
+        : [];
 
       // Filter labs for this teacher
-      const teacherLabs = labs.filter(lab =>
-        lab.teacher === currentUser.name
-      ).map(lab => ({ ...lab, type: 'lab' }));
+      const teacherLabs = Array.isArray(labs)
+        ? labs
+            .filter(matchesTeacher)
+            .map(lab => ({ ...lab, type: 'lab' }))
+        : [];
 
       // Combine classes and labs
       const allSessions = [...teacherClasses, ...teacherLabs];
@@ -91,7 +163,7 @@ const TeacherDashboard = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentUser, warning]);
+  }, [matchesTeacher, teacherIdentity, warning]);
 
   useEffect(() => {
     loadTeacherData();
@@ -172,6 +244,14 @@ const TeacherDashboard = () => {
                   })}
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={() => navigate('/schedule-change-requests')}
+                className="inline-flex items-center px-4 py-2 rounded-xl bg-primary-600 text-white font-semibold shadow-sm hover:bg-primary-700 transition"
+              >
+                <i className="fas fa-exchange-alt mr-2" />
+                Request change
+              </button>
             </div>
           </div>
         </div>

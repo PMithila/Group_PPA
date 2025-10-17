@@ -38,6 +38,26 @@ export class User {
     return result.rows[0] || null;
   }
 
+  static async findByName(name) {
+    if (!name) return null;
+    const query = 'SELECT * FROM users WHERE LOWER(name) = LOWER($1) LIMIT 1';
+    const result = await pool.query(query, [name.trim()]);
+    return result.rows[0] || null;
+  }
+
+  static async searchByNameLike(name) {
+    if (!name) return [];
+    const query = `
+      SELECT id, name, email, role
+      FROM users
+      WHERE role IN ('teacher', 'TEACHER')
+        AND name ILIKE $1
+      ORDER BY name
+    `;
+    const result = await pool.query(query, [`%${name}%`]);
+    return result.rows;
+  }
+
   static async create(userData) {
     const { email, password, name, role, department } = userData;
     const query = `
@@ -60,5 +80,15 @@ export class User {
     const query = 'DELETE FROM users WHERE id = $1';
     await pool.query(query, [id]);
   }
-}
 
+  static async getAllTeachers() {
+    const query = `
+      SELECT id, name, email, role, department
+      FROM users
+      WHERE role IN ('teacher', 'TEACHER')
+      ORDER BY name
+    `;
+    const result = await pool.query(query);
+    return result.rows;
+  }
+}

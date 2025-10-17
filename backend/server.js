@@ -8,6 +8,8 @@ import authRoutes from './routes/auth.js';
 import uploadRoutes from './routes/upload.js';
 import schedulerRoutes from './routes/scheduler.js';
 import classRoutes from './routes/classes.js';
+import leaveRoutes from './routes/leaves.js';
+import changeRequestRoutes from './routes/changeRequests.js';
 import facultyRoutes from './routes/faculty.js';
 import labRoutes from './routes/labs.js';
 import subjectRoutes from './routes/subjects.js';
@@ -18,7 +20,11 @@ import Faculty from './models/Faculty.js';
 import Lab from './models/Lab.js';
 import { Subject } from './models/Subject.js';
 import { Department } from './models/Department.js';
+import { PasswordResetToken } from './models/PasswordResetToken.js';
+import { LeaveRequest } from './models/LeaveRequest.js';
+import { ScheduleChangeRequest } from './models/ScheduleChangeRequest.js';
 import { seedSampleData } from './migrations/seed_sample_data.js';
+import { syncLabNamesTrigger } from './migrations/sync_lab_names_trigger.js';
 import pool from './config/database.js';
 
 const app = express();
@@ -47,6 +53,8 @@ app.use('/api/faculty', facultyRoutes);
 app.use('/api/labs', labRoutes);
 app.use('/api/subjects', subjectRoutes);
 app.use('/api/departments', departmentRoutes);
+app.use('/api/leaves', leaveRoutes);
+app.use('/api/change-requests', changeRequestRoutes);
 
 // Example of a protected route
 app.get('/api/protected', (req, res) => {
@@ -194,9 +202,13 @@ const initializeDatabase = async () => {
     await Department.createTable();
     await Subject.createTable();
     await User.createTable();
+    await PasswordResetToken.createTable();
+    await LeaveRequest.createTable();
     await Class.createTable();
     await Faculty.createTable();
     await Lab.createTable();
+    await ScheduleChangeRequest.createTable();
+    await Lab.syncNamesWithSubjects();
     
     // Run migrations for existing tables
     await runMigrations();
@@ -239,6 +251,8 @@ const runMigrations = async () => {
         console.log(`✓ Added "${column.name}" column to classes table`);
       }
     }
+
+    await syncLabNamesTrigger();
   } catch (error) {
     console.error('Migration error:', error);
     // Don't exit on migration errors, just log them

@@ -52,6 +52,7 @@ npm install
 3. Set up environment variables:
    - Copy `.env` file and configure your database connection
    - Set JWT secret and other required variables
+   - Configure SMTP (see **Email Notifications** section) so leave request emails can be delivered
 
 4. Start the development servers:
 ```bash
@@ -114,6 +115,55 @@ Group_PPA/
 
 ### Teachers
 - `GET /auth/teachers` - Get all teachers
+
+### AI Scheduler
+- `POST /api/scheduler/generate-from-excel` *(admin, multipart form with `file` field)* - Generate class schedule from Excel via OpenAI
+
+## Automated Class Generator
+
+Upload an Excel file containing teacher assignments (columns: `Teacher`, `Subject`, `Grade`, optional `Preferred Days`, `Preferred Times`, `Duration`, `Max Students`) to `/api/scheduler/generate-from-excel`. The backend will:
+
+1. Parse the sheet and build scheduling requests.
+2. Call OpenAI using `OPENAI_API_KEY` to propose a conflict-free timetable.
+3. Create class records that avoid clashes with existing classes/labs.
+
+Environment variables:
+```
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_SCHEDULER_MODEL=gpt-4o-mini   # Optional override
+```
+
+If the key is missing the endpoint returns an error. All new subjects generated on the fly receive placeholder codes.
+
+## Email Notifications
+
+Leave management emails (submission confirmations and approval/rejection notices) use SMTP credentials defined in `backend/.env`. Provide the following values for your mail provider:
+
+```
+SMTP_HOST=smtp.yourprovider.com
+SMTP_PORT=587
+SMTP_SECURE=false   # true for SSL (e.g. port 465)
+SMTP_USER=your-smtp-username
+SMTP_PASS=your-smtp-password-or-app-password
+EMAIL_FROM="EduSync <no-reply@yourdomain.com>"
+```
+
+If these variables are omitted, the application logs the notification attempt but skips sending the email so other features continue to work.
+
+### Gmail Quick Start
+
+1. Enable two-factor authentication on the Gmail account.
+2. Generate a **16-character App Password** (Google Account → Security → App passwords → Select "Mail" + "Other").
+3. Update `backend/.env` with:
+   ```
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=465        # use 587 with SMTP_SECURE=false if preferred
+   SMTP_SECURE=true
+   SMTP_USER=your-gmail-address@gmail.com
+   SMTP_PASS=the-16-character-app-password
+   EMAIL_FROM="EduSync <your-gmail-address@gmail.com>"
+   ```
+4. Restart the backend server so the new credentials are loaded.
 
 ## Contributing
 

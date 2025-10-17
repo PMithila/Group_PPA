@@ -38,6 +38,16 @@ export async function login(email, password) {
   const res = await instance.post("/auth/token", { email, password });
   return res.data;
 }
+
+export async function requestPasswordReset(email) {
+  const res = await instance.post("/auth/forgot-password", { email });
+  return res.data;
+}
+
+export async function resetPassword(token, password) {
+  const res = await instance.post("/auth/reset-password", { token, password });
+  return res.data;
+}
 export async function uploadCSV(file) {
   const fd = new FormData();
   fd.append("file", file);
@@ -203,12 +213,64 @@ export async function createUser(userData) {
 }
 
 export async function updateUser(id, userData) {
-  const res = await instance.put(`/auth/users/${id}`, userData);
+  const { password, ...sanitizedData } = userData;
+  const res = await instance.put(`/auth/users/${id}`, sanitizedData);
   return res.data;
 }
 
 export async function deleteUser(id) {
   const res = await instance.delete(`/auth/users/${id}`);
+  return res.data;
+}
+
+// Leave Requests API
+export async function getLeaveRequests() {
+  const res = await instance.get('/api/leaves');
+  return res.data;
+}
+
+export async function createLeaveRequest(leaveData) {
+  const res = await instance.post('/api/leaves', leaveData);
+  return res.data;
+}
+
+export async function updateLeaveStatus(id, payload) {
+  const res = await instance.put(`/api/leaves/${id}/status`, payload);
+  return res.data;
+}
+
+// Schedule Change Requests API
+export async function getScheduleChangeRequests() {
+  const res = await instance.get('/api/change-requests');
+  return res.data;
+}
+
+export async function createScheduleChangeRequest(payload) {
+  const res = await instance.post('/api/change-requests', payload);
+  return res.data;
+}
+
+export async function updateScheduleChangeRequestStatus(id, payload) {
+  const res = await instance.put(`/api/change-requests/${id}/status`, payload);
+  return res.data;
+}
+
+export async function applyScheduleChangeRequest(id, payload) {
+  const res = await instance.put(`/api/change-requests/${id}/apply`, payload);
+  return res.data;
+}
+
+// Scheduler Automation API
+export async function generateScheduleFromExcel(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await instance.post('/api/scheduler/generate-from-excel', formData, {
+    // Let axios set the Content-Type with correct boundary automatically
+    headers: {
+      Accept: 'application/json'
+    }
+  });
   return res.data;
 }
 

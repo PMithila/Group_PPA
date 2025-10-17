@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import { authenticateToken } from '../middleware/auth.js';
+import { handleUpload, listUploads } from '../controllers/uploadController.js';
 import { fileURLToPath } from 'url';
 
 const router = express.Router();
@@ -40,47 +41,9 @@ const upload = multer({
 });
 
 // Upload CSV endpoint
-router.post('/', authenticateToken, upload.single('file'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-
-    // For now, just return file info
-    // In a real implementation, you'd process the file and store metadata in database
-    const fileInfo = {
-      id: Date.now(), // Mock ID
-      filename: req.file.originalname,
-      path: req.file.path,
-      uploaded_by: req.user.id,
-      uploaded_at: new Date().toISOString()
-    };
-
-    res.json(fileInfo);
-  } catch (error) {
-    console.error('Upload error:', error);
-    res.status(500).json({ error: 'File upload failed' });
-  }
-});
+router.post('/', authenticateToken, upload.single('file'), handleUpload);
 
 // List uploads endpoint
-router.get('/', authenticateToken, async (req, res) => {
-  try {
-    // Mock response for now - in real implementation, fetch from database
-    const mockUploads = [
-      {
-        id: 1,
-        filename: 'teachers.csv',
-        path: '/uploads/teachers-123456789.csv',
-        uploaded_by: req.user.id,
-        uploaded_at: new Date().toISOString()
-      }
-    ];
-    res.json(mockUploads);
-  } catch (error) {
-    console.error('List uploads error:', error);
-    res.status(500).json({ error: 'Failed to fetch uploads' });
-  }
-});
+router.get('/', authenticateToken, listUploads);
 
 export default router;

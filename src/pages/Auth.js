@@ -2,9 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { getDepartments } from '../api';
-// import { login, register, setToken } from '../api'; // Unused for now
-// Removed old CSS import - using Tailwind CSS now
+import { getDepartments, requestPasswordReset, resetPassword } from '../api';
 
 const Auth = () => {
   const [email, setEmail] = useState('');
@@ -12,62 +10,128 @@ const Auth = () => {
   const [name, setName] = useState('');
   const [department, setDepartment] = useState('');
   const [departments, setDepartments] = useState([]);
-  const [isRegister, setIsRegister] = useState(false);
+  const [mode, setMode] = useState('login');
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [resetToken, setResetToken] = useState('');
   const { login: authLogin, register: authRegister } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Load departments for selection
     const loadDepartments = async () => {
       try {
         const depts = await getDepartments();
         setDepartments(depts);
-        // Set first department as default if available
-        if (depts.length > 0 && !department) {
-          setDepartment(depts[0].id.toString());
+        if (depts.length > 0) {
+          setDepartment(prev => prev || depts[0].id.toString());
         }
-      } catch (error) {
-        console.error('Error loading departments:', error);
+      } catch (err) {
+        console.error('Error loading departments:', err);
       }
     };
     loadDepartments();
-  }, [department]);
+  }, []);
+
+  useEffect(() => {
+    if (mode === 'register' && departments.length > 0) {
+      setDepartment(prev => prev || departments[0].id.toString());
+    }
+  }, [mode, departments]);
+
+  const handleSwitchMode = (nextMode) => {
+    setMode(nextMode);
+    setError('');
+    setSuccessMessage('');
+    setLoading(false);
+    setPassword('');
+    setConfirmPassword('');
+    setResetToken('');
+  };
+
+  const submitLabel = {
+    login: 'Sign In',
+    register: 'Create Account',
+    forgot: 'Send Reset Link',
+    reset: 'Reset Password'
+  }[mode];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setSuccessMessage('');
 
     try {
-      if (isRegister) {
+      if (mode === 'register') {
         const result = await authRegister({ email, password, name, department, role: 'teacher' });
         if (result.success) {
-          // All users are registered as teachers, so redirect to the teacher view
           navigate('/dashboard');
         } else {
           setError(result.error || 'Registration failed');
         }
-      } else {
+      } else if (mode === 'login') {
         const result = await authLogin(email, password);
         if (result.success) {
-          // Redirect based on user role
           if (result.user.role === 'admin') {
             navigate('/dashboard');
           } else {
-            navigate('/classes');
+            navigate('/timetable');
           }
         } else {
           setError(result.error || 'Login failed');
         }
+      } else if (mode === 'forgot') {
+        const response = await requestPasswordReset(email);
+        const baseMessage = response.message || 'If an account with that email exists, you will receive reset instructions shortly.';
+        const hasToken = Boolean(response.resetToken);
+        setSuccessMessage(
+          hasToken
+            ? `${baseMessage} Use the pre-filled reset token below while testing locally.`
+            : baseMessage
+        );
+        setMode('reset');
+        setPassword('');
+        setConfirmPassword('');
+        setResetToken(response.resetToken || '');
+      } else if (mode === 'reset') {
+        if (password !== confirmPassword) {
+          setError('Passwords do not match');
+          return;
+        }
+        await resetPassword(resetToken, password);
+        setSuccessMessage('Password has been reset. You can now sign in.');
+        setMode('login');
+        setPassword('');
+        setConfirmPassword('');
+        setResetToken('');
       }
     } catch (err) {
-      setError(isRegister ? 'Registration failed' : 'Login failed');
-    }
+      const responseMessage =
+        err?.response?.data?.error ||
+        err?.response?.data?.errors?.[0]?.msg;
 
-    setLoading(false);
+      if (responseMessage) {
+        setError(responseMessage);
+      } else if (mode === 'register') {
+        setError('Registration failed');
+      } else if (mode === 'login') {
+        setError('Login failed');
+      } else if (mode === 'forgot') {
+        setError('Failed to request password reset');
+      } else {
+        setError('Password reset failed');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const isLogin = mode === 'login';
+  const isRegister = mode === 'register';
+  const isForgot = mode === 'forgot';
+  const isReset = mode === 'reset';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center px-4 py-12">
@@ -83,17 +147,18 @@ const Auth = () => {
             </div>
           </div>
 
-          {/* Tabs */}
           <div className="mb-6 bg-slate-100 rounded-xl p-1 flex">
             <button
-              className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${!isRegister ? 'bg-white text-primary-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-              onClick={() => setIsRegister(false)}
+              type="button"
+              className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${isLogin ? 'bg-white text-primary-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+              onClick={() => handleSwitchMode('login')}
             >
               Sign In
             </button>
             <button
+              type="button"
               className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${isRegister ? 'bg-white text-primary-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-              onClick={() => setIsRegister(true)}
+              onClick={() => handleSwitchMode('register')}
             >
               Register
             </button>
@@ -103,6 +168,13 @@ const Auth = () => {
             <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3">
               <i className="fas fa-exclamation-triangle mr-2"></i>
               {error}
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl p-3">
+              <i className="fas fa-check-circle mr-2"></i>
+              {successMessage}
             </div>
           )}
 
@@ -122,18 +194,20 @@ const Auth = () => {
               </div>
             )}
 
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-2">Email Address</label>
-              <input
-                type="email"
-                id="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                placeholder="Enter your email"
-                className="input-field"
-              />
-            </div>
+            {!isReset && (
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-2">Email Address</label>
+                <input
+                  type="email"
+                  id="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  placeholder="Enter your email"
+                  className="input-field"
+                />
+              </div>
+            )}
 
             {isRegister && (
               <div>
@@ -155,19 +229,70 @@ const Auth = () => {
               </div>
             )}
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-2">Password</label>
-              <input
-                type="password"
-                id="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                placeholder="Enter your password"
-                minLength="6"
-                className="input-field"
-              />
-            </div>
+            {(isLogin || isRegister) && (
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-2">Password</label>
+                <input
+                  type="password"
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  placeholder={isLogin ? 'Enter your password' : 'Create a password'}
+                  minLength="6"
+                  className="input-field"
+                />
+              </div>
+            )}
+
+            {isReset && (
+              <>
+                <div>
+                  <label htmlFor="reset-token" className="block text-sm font-medium text-slate-700 mb-2">Reset Token</label>
+                  <input
+                    type="text"
+                    id="reset-token"
+                    value={resetToken}
+                    onChange={(e) => setResetToken(e.target.value)}
+                    required
+                    placeholder="Paste the reset token you received"
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="new-password" className="block text-sm font-medium text-slate-700 mb-2">New Password</label>
+                  <input
+                    type="password"
+                    id="new-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    placeholder="Enter a new password"
+                    minLength="6"
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="confirm-password" className="block text-sm font-medium text-slate-700 mb-2">Confirm New Password</label>
+                  <input
+                    type="password"
+                    id="confirm-password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    placeholder="Confirm your new password"
+                    minLength="6"
+                    className="input-field"
+                  />
+                </div>
+              </>
+            )}
+
+            {isForgot && (
+              <p className="text-sm text-slate-600">
+                Enter the email associated with your account and we&apos;ll send password reset instructions.
+              </p>
+            )}
 
             <button
               type="submit"
@@ -179,19 +304,41 @@ const Auth = () => {
                   <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
                   Processing...
                 </span>
-              ) : isRegister ? (
-                'Create Account'
-              ) : (
-                'Sign In'
-              )}
+              ) : submitLabel}
             </button>
           </form>
 
-          <div className="mt-6 bg-slate-50 rounded-xl p-4 text-sm text-slate-600">
-            <p className="font-medium mb-1">Demo Credentials</p>
-            <p>Admin: admin@school.edu / admin123</p>
-            <p>Teacher: teacher@school.edu / teacher123</p>
-          </div>
+          {isLogin && (
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                className="text-sm text-primary-700 hover:text-primary-800 font-medium"
+                onClick={() => handleSwitchMode('forgot')}
+              >
+                Forgot your password?
+              </button>
+            </div>
+          )}
+
+          {(isForgot || isReset) && (
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                className="text-sm text-primary-700 hover:text-primary-800 font-medium"
+                onClick={() => handleSwitchMode('login')}
+              >
+                Back to sign in
+              </button>
+            </div>
+          )}
+
+          {isLogin && (
+            <div className="mt-6 bg-slate-50 rounded-xl p-4 text-sm text-slate-600">
+              <p className="font-medium mb-1">Demo Credentials</p>
+              <p>Admin: admin@school.edu / admin123</p>
+              <p>Teacher: teacher@school.edu / teacher123</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
