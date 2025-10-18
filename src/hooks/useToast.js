@@ -8,6 +8,10 @@ export const useToast = () => {
     const id = Date.now() + Math.random();
     const newToast = { id, message, type, duration };
     
+
+
+
+    
     setToasts(prev => [...prev, newToast]);
     
     // Auto remove after duration
