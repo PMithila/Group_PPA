@@ -1,7 +1,7 @@
 // src/pages/Auth.js
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { getDepartments, requestPasswordReset, resetPassword } from '../api';
 
 const Auth = () => {
@@ -15,9 +15,19 @@ const Auth = () => {
   const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [resetToken, setResetToken] = useState('');
+  const [resetToken, setResetToken] = useState(''); // kept in state only, never rendered
   const { login: authLogin, register: authRegister } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Parse query params (mode & token) so reset token can come from the reset link
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const qMode = params.get('mode');
+    const qToken = params.get('token');
+    if (qMode) setMode(qMode);
+    if (qToken) setResetToken(qToken);
+  }, [location.search]);
 
   useEffect(() => {
     const loadDepartments = async () => {
@@ -47,7 +57,8 @@ const Auth = () => {
     setLoading(false);
     setPassword('');
     setConfirmPassword('');
-    setResetToken('');
+    // Do NOT wipe resetToken when switching to reset from a URL link
+    if (nextMode !== 'reset') setResetToken('');
   };
 
   const submitLabel = {
@@ -83,19 +94,24 @@ const Auth = () => {
           setError(result.error || 'Login failed');
         }
       } else if (mode === 'forgot') {
+        // Ask backend to send reset email containing the tokenized link.
         const response = await requestPasswordReset(email);
         const baseMessage = response.message || 'If an account with that email exists, you will receive reset instructions shortly.';
-        const hasToken = Boolean(response.resetToken);
-        setSuccessMessage(
-          hasToken
-            ? `${baseMessage} Use the pre-filled reset token below while testing locally.`
-            : baseMessage
-        );
+        setSuccessMessage(baseMessage);
+
+        // SECURITY: Do not expose the token in UI. If backend returns a token (for local dev),
+        // stash it in state ONLY; do NOT render it.
+        if (response.resetToken) setResetToken(response.resetToken);
+
+        // Move user to reset screen (only password inputs). If you prefer, keep them on login.
         setMode('reset');
         setPassword('');
         setConfirmPassword('');
-        setResetToken(response.resetToken || '');
       } else if (mode === 'reset') {
+        if (!resetToken) {
+          setError('Invalid or missing reset token. Please open the link from your email again.');
+          return;
+        }
         if (password !== confirmPassword) {
           setError('Passwords do not match');
           return;
@@ -247,17 +263,9 @@ const Auth = () => {
 
             {isReset && (
               <>
-                <div>
-                  <label htmlFor="reset-token" className="block text-sm font-medium text-slate-700 mb-2">Reset Token</label>
-                  <input
-                    type="text"
-                    id="reset-token"
-                    value={resetToken}
-                    onChange={(e) => setResetToken(e.target.value)}
-                    required
-                    placeholder="Paste the reset token you received"
-                    className="input-field"
-                  />
+                {/* Token is NOT shown. It lives only in state. */}
+                <div className="text-sm text-slate-600 bg-slate-50 rounded-xl p-3">
+                  Enter your new password. (Open the reset link from your email on this device.)
                 </div>
                 <div>
                   <label htmlFor="new-password" className="block text-sm font-medium text-slate-700 mb-2">New Password</label>
