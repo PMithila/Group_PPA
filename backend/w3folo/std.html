@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width,initial-scale=1" />
+	<title>Sunrise Community Learning — Home</title>
+	<style>
+		:root{--accent:#0ea5a4;--dark:#0f172a;--muted:#6b7280;--card:#fff}
+		body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial;line-height:1.4;color:#0f172a;background:#f8fafc}
+		header{background:linear-gradient(90deg,#06b6d4 0%, #0ea5a4 100%);color:#fff;padding:14px 18px;position:sticky;top:0;z-index:40;box-shadow:0 2px 6px rgba(2,6,23,0.08)}
+		.nav{display:flex;gap:12px;align-items:center}
+		.brand{font-weight:700;font-size:1.1rem}
+		.navlinks{margin-left:auto;display:flex;gap:8px}
+		.navlinks a{color:rgba(255,255,255,0.95);text-decoration:none;padding:8px 10px;border-radius:6px}
+		.navlinks a:hover{background:rgba(255,255,255,0.08)}
+		.container{max-width:1100px;margin:20px auto;padding:0 16px}
+		.hero{display:flex;gap:20px;align-items:center;justify-content:space-between;background:linear-gradient(180deg,rgba(255,255,255,0.9),transparent);padding:28px;border-radius:12px}
+		.hero-left{max-width:60%}
+		.h1{font-size:1.75rem;margin:0 0 8px}
+		.lead{color:var(--muted);margin:0 0 12px}
+		.cta{background:var(--accent);color:#fff;border:0;padding:10px 14px;border-radius:8px;cursor:pointer}
+		.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:18px}
+		.card{background:var(--card);padding:12px;border-radius:10px;box-shadow:0 1px 4px rgba(2,6,23,0.06)}
+		.small{font-size:.9rem;color:var(--muted)}
+		.program-title{font-weight:600;margin:6px 0}
+		.section{margin-top:28px}
+		.faculty-list{display:flex;flex-wrap:wrap;gap:12px}
+		.person{display:flex;gap:10px;align-items:center;padding:10px;border-radius:8px;background:#fff}
+		.person img{width:56px;height:56px;border-radius:50%;object-fit:cover}
+		.news-list li{margin-bottom:8px}
+		footer{padding:18px;text-align:center;color:var(--muted);font-size:.9rem;margin-top:28px}
+		form .row{display:flex;gap:8px;flex-wrap:wrap}
+		.input,textarea{width:100%;padding:8px;border-radius:8px;border:1px solid #e6e9ee;background:#fff}
+		textarea{min-height:110px}
+		@media(max-width:720px){ .hero{flex-direction:column;align-items:flex-start} .hero-left{max-width:100%} .navlinks{display:none} }
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container nav">
+			<div class="brand">Sunrise Community Learning</div>
+			<nav class="navlinks" aria-label="Main navigation">
+				<a href="#home">Home</a>
+				<a href="#about">About</a>
+				<a href="#programs">Programs</a>
+				<a href="#admissions">Admissions</a>
+				<a href="#faculty">Faculty</a>
+				<a href="#news">News</a>
+				<a href="#contact">Contact</a>
+			</nav>
+		</div>
+	</header>
+
+	<main class="container">
+		<section id="home" class="hero">
+			<div class="hero-left">
+				<h1 class="h1">Inspiring learners. Building futures.</h1>
+				<p class="lead">Sunrise Community Learning provides inclusive, practical education for all ages. Explore programs, meet our staff, and join our community.</p>
+				<div style="display:flex;gap:8px">
+					<button class="cta" onclick="document.getElementById('admissions').scrollIntoView({behavior:'smooth'})">Apply Now</button>
+					<button class="cta" style="background:#fff;color:var(--accent);border:1px solid rgba(0,0,0,0.06)" onclick="document.getElementById('programs').scrollIntoView({behavior:'smooth'})">View Programs</button>
+				</div>
+			</div>
+			<div style="min-width:220px">
+				<div class="card">
+					<div class="small">Upcoming Open Day</div>
+					<div style="font-weight:700;margin-top:6px">Saturday — 10:00 AM</div>
+					<p class="small" style="margin-top:8px">Join us for campus tours, program demos and Q&A with faculty.</p>
+				</div>
+			</div>
+		</section>
+
+		<section id="about" class="section">
+			<div class="card">
+				<h3 style="margin:0 0 6px">About Us</h3>
+				<p class="small">Sunrise Community Learning is a local, non-profit educational center offering vocational training, youth programs and evening classes. We focus on hands-on learning, mentorship and community involvement.</p>
+			</div>
+		</section>
+
+		<section id="programs" class="section">
+			<h3>Programs</h3>
+			<div class="grid">
+				<div class="card">
+					<div class="program-title">Vocational Training</div>
+					<p class="small">Short courses in trades, IT basics and hospitality — practical skills for immediate employment.</p>
+				</div>
+				<div class="card">
+					<div class="program-title">Youth Development</div>
+					<p class="small">After-school activities, coding clubs and leadership workshops for ages 8–18.</p>
+				</div>
+				<div class="card">
+					<div class="program-title">Adult Learning</div>
+					<p class="small">Evening literacy, language classes and computer skills to support lifelong learning.</p>
+				</div>
+				<div class="card">
+					<div class="program-title">Community Projects</div>
+					<p class="small">Volunteer-driven projects connecting learners to local employers and causes.</p>
+				</div>
+			</div>
+		</section>
+
+		<section id="admissions" class="section">
+			<h3>Admissions</h3>
+			<div class="card">
+				<p class="small">Applications are accepted year-round for rolling-enrolment programs. Scholarships and flexible payment options are available.</p>
+				<ul class="small">
+					<li>Step 1: Check program requirements</li>
+					<li>Step 2: Complete online form</li>
+					<li>Step 3: Attend interview or placement test (if required)</li>
+				</ul>
+				<p class="small" style="margin-top:8px">Need help? Contact our admissions office via the form below.</p>
+			</div>
+		</section>
+
+		<section id="faculty" class="section">
+			<h3>Faculty & Staff</h3>
+			<div class="faculty-list">
+				<div class="person card">
+					<img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><rect width='100%' height='100%' fill='%23e6f7f7'/></svg>" alt="Profile">
+					<div>
+						<div style="font-weight:600">Maria Lopez</div>
+						<div class="small">Director — Community Programs</div>
+					</div>
+				</div>
+				<div class="person card">
+					<img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><rect width='100%' height='100%' fill='%23f3f4f6'/></svg>" alt="Profile">
+					<div>
+						<div style="font-weight:600">James Carter</div>
+						<div class="small">Lead Instructor — IT & Digital Skills</div>
+					</div>
+				</div>
+				<div class="person card">
+					<img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><rect width='100%' height='100%' fill='%23fff7ed'/></svg>" alt="Profile">
+					<div>
+						<div style="font-weight:600">Aisha Khan</div>
+						<div class="small">Coordinator — Youth Programs</div>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<section id="news" class="section">
+			<h3>News & Events</h3>
+			<div class="card">
+				<ul class="news-list small" id="newsList">
+					<!-- JS populates sample items -->
+				</ul>
+			</div>
+		</section>
+
+		<section id="contact" class="section">
+			<h3>Contact Us</h3>
+			<div class="card">
+				<form id="contactForm">
+					<div class="row">
+						<input id="name" class="input" placeholder="Your name" required />
+						<input id="email" class="input" placeholder="Email address" required />
+					</div>
+					<div style="margin-top:8px">
+						<textarea id="message" placeholder="How can we help?" required></textarea>
+					</div>
+					<div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+						<button type="submit" class="cta">Send Message</button>
+						<span id="contactStatus" class="small" style="opacity:.8"></span>
+					</div>
+				</form>
+			</div>
+		</section>
+	</main>
+
+	<footer>
+		Sunrise Community Learning — 123 Main St, Your Town · (555) 123-4567 · <span id="year"></span>
+	</footer>
+
+	<script>
+		// Simple interactions: nav scroll, news seed, contact form storage
+		document.getElementById('year').textContent = new Date().getFullYear();
+
+		// Smooth scroll for internal links
+		document.querySelectorAll('a[href^="#"]').forEach(a=>{
+			a.addEventListener('click', e=>{
+				e.preventDefault();
+				const id = a.getAttribute('href').slice(1);
+				const el = document.getElementById(id);
+				if (el) el.scrollIntoView({behavior:'smooth', block:'start'});
+			});
+		});
+
+		// Seed news items (local)
+		(function seedNews(){
+			if (!localStorage.getItem('school_news')) {
+				const sample = [
+					{ id:'n1', title:'Open Day: Join Us', ts:Date.now()-86400000 },
+					{ id:'n2', title:'New Evening IT Course', ts:Date.now()-604800000 },
+					{ id:'n3', title:'Scholarship Applications Open', ts:Date.now()-2592000000 }
+				];
+				localStorage.setItem('school_news', JSON.stringify(sample));
+			}
+			renderNews();
+		})();
+
+		function renderNews(){
+			const list = JSON.parse(localStorage.getItem('school_news')||'[]');
+			const ul = document.getElementById('newsList');
+			ul.innerHTML = '';
+			list.slice(0,6).forEach(n=>{
+				const li = document.createElement('li');
+				li.textContent = `${new Date(n.ts).toLocaleDateString()} — ${n.title}`;
+				ul.appendChild(li);
+			});
+		}
+
+		// Contact form: validate and store messages locally (replace with API call later)
+		document.getElementById('contactForm').addEventListener('submit', function(e){
+			e.preventDefault();
+			const name = document.getElementById('name').value.trim();
+			const email = document.getElementById('email').value.trim();
+			const message = document.getElementById('message').value.trim();
+			const status = document.getElementById('contactStatus');
+			if (!name || !email || !message) {
+				status.textContent = 'Please fill all fields';
+				setTimeout(()=> status.textContent = '', 3000);
+				return;
+			}
+			const msgs = JSON.parse(localStorage.getItem('school_messages')||'[]');
+			msgs.unshift({ id:Date.now().toString(36), name, email, message, ts:Date.now() });
+			localStorage.setItem('school_messages', JSON.stringify(msgs));
+			status.textContent = 'Message sent — we will contact you soon';
+			this.reset();
+			setTimeout(()=> status.textContent = '', 5000);
+		});
+	</script>
+</body>
+</html>
