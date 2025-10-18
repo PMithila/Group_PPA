@@ -32,6 +32,8 @@ class AITimetableScheduler:
             print(f"Error loading data: {e}")
             return False
     
+
+    
     def generate_timetable(self, constraints=None):
         """Generate optimized timetable using AI algorithms"""
         try:
